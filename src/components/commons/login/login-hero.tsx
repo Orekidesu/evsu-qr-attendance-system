@@ -2,7 +2,7 @@ import { CheckCircle2 } from "lucide-react";
 
 export function LoginHero() {
   return (
-    <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary via-primary to-primary/80 flex-col justify-between p-12 text-primary-foreground">
+    <div className="hidden lg:flex lg:w-1/2 bg-linear-to-br from-primary via-primary to-primary/80 flex-col justify-between p-12 text-primary-foreground">
       {/* Logo/Brand */}
       <div>
         <div className="flex items-center gap-2 mb-2">
@@ -28,7 +28,7 @@ export function LoginHero() {
         {/* Features */}
         <div className="space-y-4 pt-4">
           <div className="flex gap-3">
-            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary-foreground/20 flex items-center justify-center">
+            <div className="shrink-0 w-6 h-6 rounded-full bg-primary-foreground/20 flex items-center justify-center">
               <CheckCircle2 className="w-4 h-4" />
             </div>
             <div>
@@ -40,7 +40,7 @@ export function LoginHero() {
           </div>
 
           <div className="flex gap-3">
-            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary-foreground/20 flex items-center justify-center">
+            <div className="shrink-0 w-6 h-6 rounded-full bg-primary-foreground/20 flex items-center justify-center">
               <CheckCircle2 className="w-4 h-4" />
             </div>
             <div>
@@ -52,7 +52,7 @@ export function LoginHero() {
           </div>
 
           <div className="flex gap-3">
-            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary-foreground/20 flex items-center justify-center">
+            <div className="shrink-0 w-6 h-6 rounded-full bg-primary-foreground/20 flex items-center justify-center">
               <CheckCircle2 className="w-4 h-4" />
             </div>
             <div>
