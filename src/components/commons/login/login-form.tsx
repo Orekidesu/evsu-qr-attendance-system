@@ -3,10 +3,12 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
+import { signIn, getUserData } from "@/lib/firebase/auth";
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -17,6 +19,8 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
   const {
     register,
@@ -28,11 +32,38 @@ export function LoginForm() {
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
+    setError(null);
+
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      console.log("Login attempt:", data);
-      // In a real app, you'd handle authentication here
+      // Sign in with Firebase
+      const userCredential = await signIn(data.email, data.password);
+
+      // Get user data from Firestore
+      const userData = await getUserData(userCredential.uid);
+
+      if (!userData) {
+        throw new Error("User data not found");
+      }
+
+      // Route based on user role
+      switch (userData.role) {
+        case "admin":
+          router.push("/admin");
+          break;
+        case "teacher":
+          router.push("/teacher");
+          break;
+        case "student":
+          // Student page not implemented yet
+          setError("Student access is not available yet");
+          break;
+        default:
+          setError("Invalid user role");
+      }
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to sign in";
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -50,6 +81,14 @@ export function LoginForm() {
 
       {/* Form */}
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+        {/* Error message */}
+        {error && (
+          <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md">
+            <AlertCircle className="w-4 h-4" />
+            <p>{error}</p>
+          </div>
+        )}
+
         {/* Email field */}
         <div className="space-y-2">
           <Label htmlFor="email" className="text-sm font-medium">
