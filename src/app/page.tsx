@@ -1,4 +1,4 @@
-import { LoginPage } from "@/components/commons/login-page";
+import { LoginPage } from "@/components/commons/login/login-page";
 
 export default function Home() {
   return <LoginPage />;
