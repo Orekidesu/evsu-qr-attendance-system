@@ -1,7 +1,11 @@
+import { AdminLayout } from "@/components/layouts/AdminLayout";
+
 export default function SettingPage() {
   return (
-    <div className="flex items-center justify-center min-h-screen">
-      <h1 className="text-4xl font-bold">This is the settings page</h1>
-    </div>
+    <AdminLayout breadcrumbs={[{ label: "Settings" }]}>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <h1 className="text-4xl font-bold">Settings</h1>
+      </div>
+    </AdminLayout>
   );
 }

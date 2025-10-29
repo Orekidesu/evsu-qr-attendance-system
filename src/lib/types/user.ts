@@ -5,7 +5,8 @@ export type UserRole = "admin" | "teacher" | "student";
 
 export interface User {
   id: string;
-  name: string;
+  first_name: string;
+  last_name: string;
   email: string;
   role: UserRole;
   program_id?: string; // only for students
@@ -15,7 +16,8 @@ export interface User {
 }
 
 export interface CreateUserInput {
-  name: string;
+  first_name: string;
+  last_name: string;
   email: string;
   role: UserRole;
   program_id?: string;

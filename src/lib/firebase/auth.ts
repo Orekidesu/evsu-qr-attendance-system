@@ -38,7 +38,8 @@ export async function createUser(
     const userDoc: Omit<User, "id" | "created_at"> & {
       created_at: FieldValue;
     } = {
-      name: userData.name,
+      first_name: userData.first_name,
+      last_name: userData.last_name,
       email,
       role: userData.role,
       created_at: serverTimestamp(),
