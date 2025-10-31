@@ -23,6 +23,7 @@ export default function ProgramPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedProgram, setSelectedProgram] =
     useState<ProgramWithCounts | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const filteredPrograms = useMemo(() => {
     return programs.filter((program) =>
@@ -50,16 +51,32 @@ export default function ProgramPage() {
     abbreviation: string;
     academic_year: string;
   }) => {
-    if (selectedProgram) {
-      await editProgram(selectedProgram.id, data);
-    } else {
-      await addProgram(data);
+    setActionError(null);
+    try {
+      if (selectedProgram) {
+        await editProgram(selectedProgram.id, data);
+      } else {
+        await addProgram(data);
+      }
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to save program";
+      setActionError(errorMessage);
+      throw err; // Re-throw to let the dialog handle loading state
     }
   };
 
   const handleConfirmDelete = async () => {
-    if (selectedProgram) {
-      await removeProgram(selectedProgram.id);
+    setActionError(null);
+    try {
+      if (selectedProgram) {
+        await removeProgram(selectedProgram.id);
+      }
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to delete program";
+      setActionError(errorMessage);
+      throw err; // Re-throw to let the dialog handle loading state
     }
   };
   return (
@@ -72,11 +89,21 @@ export default function ProgramPage() {
         </div>
 
         {/* Error Alert */}
-        {error && (
+        {(error || actionError) && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Error</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>
+              {error || actionError}
+              {error && error.includes("authentication") && (
+                <div className="mt-2">
+                  <p className="text-sm">
+                    Please make sure you are logged in and try refreshing the
+                    page.
+                  </p>
+                </div>
+              )}
+            </AlertDescription>
           </Alert>
         )}
 

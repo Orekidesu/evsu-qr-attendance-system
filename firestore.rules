@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function getUserRole() {
+      // Safely check if user document exists and has a role
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) 
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role 
+        : null;
+    }
+    
+    function isAdmin() {
+      return getUserRole() == 'admin';
+    }
+    
+    function isTeacher() {
+      return getUserRole() == 'teacher';
+    }
+    
+    function isStudent() {
+      return getUserRole() == 'student';
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      // Users can read their own document, admins can read all
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      // Admin can create any user
+      allow create: if isAdmin();
+      // Admin can update any user, users can update their own profile (but not role)
+      allow update: if isAdmin() || 
+                      (isSignedIn() && request.auth.uid == userId && 
+                       request.resource.data.role == resource.data.role);
+      // Only admin can delete
+      allow delete: if isAdmin();
+    }
+    
+    // Students collection
+    match /students/{studentId} {
+      // All authenticated users can read students
+      allow read: if isSignedIn();
+      // Only admin can create, update, or delete students
+      allow write: if isAdmin();
+    }
+    
+    // Programs collection
+    match /programs/{programId} {
+      // All authenticated users can read programs
+      allow read: if isSignedIn();
+      // Only admin can create, update, or delete programs
+      allow write: if isAdmin();
+    }
+    
+    // Subjects collection
+    match /subjects/{subjectId} {
+      // All authenticated users can read subjects
+      allow read: if isSignedIn();
+      // Only admin can create, update, or delete subjects
+      allow write: if isAdmin();
+      
+      // Attendance subcollection
+      match /attendance/{attendanceId} {
+        // All authenticated users can read attendance
+        allow read: if isSignedIn();
+        // Teachers and admins can create attendance records
+        allow create: if isTeacher() || isAdmin();
+        // Only admin can update or delete attendance
+        allow update, delete: if isAdmin();
+      }
+    }
+    
+    // Enrollments collection
+    match /enrollments/{enrollmentId} {
+      // All authenticated users can read enrollments
+      allow read: if isSignedIn();
+      // Only admin can create, update, or delete enrollments
+      allow write: if isAdmin();
+    }
+  }
+}

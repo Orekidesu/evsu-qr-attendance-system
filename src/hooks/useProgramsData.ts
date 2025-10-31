@@ -9,6 +9,7 @@ import {
 } from "@/lib/firebase/firestore";
 import { getSubjectsByProgram } from "@/lib/firebase/firestore";
 import { getStudentsByProgram } from "@/lib/firebase/firestore";
+import { useAuth } from "@/contexts/AuthContext";
 import type { Program } from "@/lib/types/program";
 
 export interface ProgramWithCounts extends Program {
@@ -17,11 +18,19 @@ export interface ProgramWithCounts extends Program {
 }
 
 export function useProgramsData() {
+  const { user, loading: authLoading } = useAuth();
   const [programs, setPrograms] = useState<ProgramWithCounts[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchPrograms = useCallback(async () => {
+    // Don't fetch if user is not authenticated
+    if (!user) {
+      setError("User not authenticated");
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
@@ -65,17 +74,24 @@ export function useProgramsData() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
-    fetchPrograms();
-  }, [fetchPrograms]);
+    // Wait for auth to finish loading before fetching
+    if (!authLoading) {
+      fetchPrograms();
+    }
+  }, [authLoading, fetchPrograms]);
 
   const addProgram = async (data: {
     name: string;
     abbreviation: string;
     academic_year: string;
   }) => {
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
     try {
       await createProgram(data);
       await fetchPrograms(); // Refresh the list
@@ -94,6 +110,10 @@ export function useProgramsData() {
       academic_year: string;
     }
   ) => {
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
     try {
       await updateProgram(programId, data);
       await fetchPrograms(); // Refresh the list
@@ -105,6 +125,10 @@ export function useProgramsData() {
   };
 
   const removeProgram = async (programId: string) => {
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
     try {
       await deleteProgram(programId);
       await fetchPrograms(); // Refresh the list
