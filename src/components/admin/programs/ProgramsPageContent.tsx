@@ -82,105 +82,103 @@ export function ProgramsPageContent() {
   };
 
   return (
-    <AdminLayout breadcrumbs={[{ label: "Programs" }]}>
-      <div className="flex-1 space-y-8 p-8">
-        {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Programs</h1>
-          <p className="text-muted-foreground">Manage all academic programs</p>
-        </div>
-
-        {/* Error Alert */}
-        {(error || actionError) && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Error</AlertTitle>
-            <AlertDescription>
-              {error || actionError}
-              {error && error.includes("authentication") && (
-                <div className="mt-2">
-                  <p className="text-sm">
-                    Please make sure you are logged in and try refreshing the
-                    page.
-                  </p>
-                </div>
-              )}
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* Search and Add Button */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search by program name..."
-              className="pl-10"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              disabled={isLoading}
-            />
-          </div>
-          <Button
-            onClick={handleAddProgram}
-            className="gap-2"
-            disabled={isLoading}
-          >
-            <Plus className="h-4 w-4" />
-            Add New Program
-          </Button>
-        </div>
-
-        {/* Loading State */}
-        {isLoading && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        )}
-
-        {/* Programs Table */}
-        {!isLoading && (
-          <ProgramsTable
-            programs={filteredPrograms}
-            onEdit={handleEditProgram}
-            onDelete={handleDeleteClick}
-          />
-        )}
-
-        {/* Add/Edit Program Modal */}
-        <ProgramFormDialog
-          open={isAddModalOpen || isEditModalOpen}
-          onOpenChange={(open) => {
-            if (!open) {
-              setIsAddModalOpen(false);
-              setIsEditModalOpen(false);
-            }
-          }}
-          onSave={handleSaveProgram}
-          initialData={
-            selectedProgram
-              ? {
-                  name: selectedProgram.name,
-                  abbreviation: selectedProgram.abbreviation,
-                  academic_year: selectedProgram.academic_year,
-                }
-              : undefined
-          }
-          mode={isEditModalOpen ? "edit" : "add"}
-        />
-
-        {/* Delete Confirmation Modal */}
-        {selectedProgram && (
-          <DeleteProgramDialog
-            open={isDeleteModalOpen}
-            onOpenChange={setIsDeleteModalOpen}
-            onConfirm={handleConfirmDelete}
-            programName={selectedProgram.name}
-            subjectsCount={selectedProgram.subjectsCount}
-            studentsCount={selectedProgram.studentsCount}
-          />
-        )}
+    <div className="flex-1 space-y-8 p-8">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Programs</h1>
+        <p className="text-muted-foreground">Manage all academic programs</p>
       </div>
-    </AdminLayout>
+
+      {/* Error Alert */}
+      {(error || actionError) && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>
+            {error || actionError}
+            {error && error.includes("authentication") && (
+              <div className="mt-2">
+                <p className="text-sm">
+                  Please make sure you are logged in and try refreshing the
+                  page.
+                </p>
+              </div>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Search and Add Button */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search by program name..."
+            className="pl-10"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            disabled={isLoading}
+          />
+        </div>
+        <Button
+          onClick={handleAddProgram}
+          className="gap-2"
+          disabled={isLoading}
+        >
+          <Plus className="h-4 w-4" />
+          Add New Program
+        </Button>
+      </div>
+
+      {/* Loading State */}
+      {isLoading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      )}
+
+      {/* Programs Table */}
+      {!isLoading && (
+        <ProgramsTable
+          programs={filteredPrograms}
+          onEdit={handleEditProgram}
+          onDelete={handleDeleteClick}
+        />
+      )}
+
+      {/* Add/Edit Program Modal */}
+      <ProgramFormDialog
+        open={isAddModalOpen || isEditModalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsAddModalOpen(false);
+            setIsEditModalOpen(false);
+          }
+        }}
+        onSave={handleSaveProgram}
+        initialData={
+          selectedProgram
+            ? {
+                name: selectedProgram.name,
+                abbreviation: selectedProgram.abbreviation,
+                academic_year: selectedProgram.academic_year,
+              }
+            : undefined
+        }
+        mode={isEditModalOpen ? "edit" : "add"}
+      />
+
+      {/* Delete Confirmation Modal */}
+      {selectedProgram && (
+        <DeleteProgramDialog
+          open={isDeleteModalOpen}
+          onOpenChange={setIsDeleteModalOpen}
+          onConfirm={handleConfirmDelete}
+          programName={selectedProgram.name}
+          subjectsCount={selectedProgram.subjectsCount}
+          studentsCount={selectedProgram.studentsCount}
+        />
+      )}
+    </div>
   );
 }
