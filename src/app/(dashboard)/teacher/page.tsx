@@ -47,7 +47,9 @@ export default function TeacherPage() {
     <div className="flex flex-col items-center justify-center min-h-screen gap-4 p-8">
       <div className="text-center space-y-4">
         <h1 className="text-4xl font-bold">Teacher Dashboard</h1>
-        <p className="text-muted-foreground">Welcome, {user.name}</p>
+        <p className="text-muted-foreground">
+          Welcome, {user.first_name} {user.last_name}
+        </p>
         <p className="text-sm text-muted-foreground">Email: {user.email}</p>
         {user.assigned_subjects && user.assigned_subjects.length > 0 && (
           <p className="text-sm text-muted-foreground">

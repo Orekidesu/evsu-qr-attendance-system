@@ -8,6 +8,8 @@ import {
   BookOpen,
   LayoutDashboard,
 } from "lucide-react";
+import Link from "next/link";
+import { useAuth } from "@/contexts/AuthContext";
 
 import { NavMain } from "@/components/navigation/nav-main";
 import { NavUser } from "@/components/navigation/nav-user";
@@ -21,68 +23,68 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
-const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
+const navMain = [
+  {
+    title: "Dashboard",
+    url: "/admin",
+    icon: LayoutDashboard,
+    isActive: true,
   },
-  navMain: [
-    {
-      title: "Dashboard",
-      url: "#",
-      icon: LayoutDashboard,
-      isActive: true,
-    },
-    {
-      title: "Programs",
-      url: "#",
-      icon: BookOpen,
-    },
-    {
-      title: "Subjects",
-      url: "#",
-      icon: BookOpen,
-    },
-    {
-      title: "Users",
-      url: "#",
-      icon: Users,
-    },
-    {
-      title: "Settings",
-      url: "#",
-      icon: Settings,
-    },
-  ],
-  navSecondary: [],
-  projects: [],
-};
+  {
+    title: "Programs",
+    url: "/admin/programs",
+    icon: BookOpen,
+  },
+  {
+    title: "Subjects",
+    url: "/admin/subjects",
+    icon: BookOpen,
+  },
+  {
+    title: "Users",
+    url: "/admin/users",
+    icon: Users,
+  },
+  {
+    title: "Settings",
+    url: "/admin/settings",
+    icon: Settings,
+  },
+];
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const { user } = useAuth();
+
+  const userData = {
+    name: user ? `${user.first_name} ${user.last_name}` : "Admin",
+    email: user?.email || "admin@example.com",
+    avatar: "/avatars/admin.jpg",
+  };
   return (
     <Sidebar variant="inset" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <a href="#">
+              <Link href="/admin">
                 <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
                   <Command className="size-4" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">Welcome Admin</span>
+                  <span className="truncate font-medium">
+                    EVSU QR Attendance
+                  </span>
                 </div>
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
+        <NavMain items={navMain} />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser user={userData} />
       </SidebarFooter>
     </Sidebar>
   );
