@@ -57,6 +57,13 @@ export default function SubjectForm({
   const [schedules, setSchedules] = useState<Schedule[]>(
     initialData?.schedules || []
   );
+  const [errors, setErrors] = useState<{
+    courseCode?: string;
+    title?: string;
+    program?: string;
+    teacher?: string;
+    schedules?: string;
+  }>({});
 
   const handleAddSchedule = () => {
     const newSchedule: Schedule = {
@@ -97,21 +104,109 @@ export default function SubjectForm({
     );
   };
 
+  const validateForm = (): boolean => {
+    const newErrors: {
+      courseCode?: string;
+      title?: string;
+      program?: string;
+      teacher?: string;
+      schedules?: string;
+    } = {};
+
+    // Course code validation
+    if (!courseCode.trim()) {
+      newErrors.courseCode = "Course code is required";
+    } else if (courseCode.trim().length < 2) {
+      newErrors.courseCode = "Course code must be at least 2 characters";
+    } else if (!/^[A-Z0-9\s-]+$/i.test(courseCode)) {
+      newErrors.courseCode =
+        "Course code can only contain letters, numbers, spaces, and hyphens";
+    }
+
+    // Title validation
+    if (!title.trim()) {
+      newErrors.title = "Descriptive title is required";
+    } else if (title.trim().length < 3) {
+      newErrors.title = "Title must be at least 3 characters";
+    }
+
+    // Program validation
+    if (!program) {
+      newErrors.program = "Please select a program";
+    }
+
+    // Teacher validation
+    if (!teacher) {
+      newErrors.teacher = "Please assign a teacher";
+    }
+
+    // Schedule validation
+    if (schedules.length === 0) {
+      newErrors.schedules = "At least one schedule is required";
+    } else {
+      // Validate each schedule
+      for (let i = 0; i < schedules.length; i++) {
+        const schedule = schedules[i];
+
+        if (schedule.days.length === 0) {
+          newErrors.schedules = `Schedule ${i + 1}: Please select at least one day`;
+          break;
+        }
+
+        if (!schedule.startTime || !schedule.endTime) {
+          newErrors.schedules = `Schedule ${i + 1}: Start and end times are required`;
+          break;
+        }
+
+        if (schedule.startTime >= schedule.endTime) {
+          newErrors.schedules = `Schedule ${i + 1}: End time must be after start time`;
+          break;
+        }
+
+        // Check for duplicate schedules (same days and overlapping times)
+        for (let j = i + 1; j < schedules.length; j++) {
+          const otherSchedule = schedules[j];
+          const dayOverlap = schedule.days.some((day) =>
+            otherSchedule.days.includes(day)
+          );
+
+          if (dayOverlap) {
+            const timeOverlap =
+              (schedule.startTime >= otherSchedule.startTime &&
+                schedule.startTime < otherSchedule.endTime) ||
+              (schedule.endTime > otherSchedule.startTime &&
+                schedule.endTime <= otherSchedule.endTime) ||
+              (schedule.startTime <= otherSchedule.startTime &&
+                schedule.endTime >= otherSchedule.endTime);
+
+            if (timeOverlap) {
+              const conflictDays = schedule.days.filter((day) =>
+                otherSchedule.days.includes(day)
+              );
+              newErrors.schedules = `Duplicate schedule detected: Schedules ${i + 1} and ${
+                j + 1
+              } overlap on ${conflictDays.join(", ")}`;
+              break;
+            }
+          }
+        }
+
+        if (newErrors.schedules) break;
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = () => {
-    if (
-      !courseCode ||
-      !title ||
-      !program ||
-      !teacher ||
-      schedules.length === 0
-    ) {
-      alert("Please fill all fields and add at least one schedule");
+    if (!validateForm()) {
       return;
     }
 
     onSubmit({
-      courseCode,
-      title,
+      courseCode: courseCode.trim(),
+      title: title.trim(),
       program,
       teacher,
       schedules,
@@ -127,25 +222,43 @@ export default function SubjectForm({
             htmlFor="courseCode"
             className="mb-2 block text-sm font-semibold"
           >
-            Course Code
+            Course Code <span className="text-red-500">*</span>
           </Label>
           <Input
             id="courseCode"
             placeholder="e.g., IT101"
             value={courseCode}
-            onChange={(e) => setCourseCode(e.target.value)}
+            onChange={(e) => {
+              setCourseCode(e.target.value);
+              if (errors.courseCode) {
+                setErrors({ ...errors, courseCode: undefined });
+              }
+            }}
+            className={errors.courseCode ? "border-red-500" : ""}
           />
+          {errors.courseCode && (
+            <p className="text-sm text-red-500 mt-1">{errors.courseCode}</p>
+          )}
         </div>
         <div>
           <Label htmlFor="title" className="mb-2 block text-sm font-semibold">
-            Descriptive Title
+            Descriptive Title <span className="text-red-500">*</span>
           </Label>
           <Input
             id="title"
             placeholder="e.g., Intro to Programming"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => {
+              setTitle(e.target.value);
+              if (errors.title) {
+                setErrors({ ...errors, title: undefined });
+              }
+            }}
+            className={errors.title ? "border-red-500" : ""}
           />
+          {errors.title && (
+            <p className="text-sm text-red-500 mt-1">{errors.title}</p>
+          )}
         </div>
       </div>
 
@@ -153,7 +266,7 @@ export default function SubjectForm({
       <div className="grid gap-4 md:grid-cols-2">
         <div>
           <Label htmlFor="program" className="mb-2 block text-sm font-semibold">
-            Select Program
+            Select Program <span className="text-red-500">*</span>
           </Label>
           <Select value={program} onValueChange={setProgram}>
             <SelectTrigger>
@@ -167,12 +280,23 @@ export default function SubjectForm({
               ))}
             </SelectContent>
           </Select>
+          {errors.program && (
+            <p className="text-sm text-red-500 mt-1">{errors.program}</p>
+          )}
         </div>
         <div>
           <Label htmlFor="teacher" className="mb-2 block text-sm font-semibold">
-            Assign Teacher
+            Assign Teacher <span className="text-red-500">*</span>
           </Label>
-          <Select value={teacher} onValueChange={setTeacher}>
+          <Select
+            value={teacher}
+            onValueChange={(value) => {
+              setTeacher(value);
+              if (errors.teacher) {
+                setErrors({ ...errors, teacher: undefined });
+              }
+            }}
+          >
             <SelectTrigger>
               <SelectValue placeholder="Choose a teacher" />
             </SelectTrigger>
@@ -184,12 +308,22 @@ export default function SubjectForm({
               ))}
             </SelectContent>
           </Select>
+          {errors.teacher && (
+            <p className="text-sm text-red-500 mt-1">{errors.teacher}</p>
+          )}
         </div>
       </div>
 
       {/* Schedules */}
       <div>
-        <Label className="mb-4 block text-sm font-semibold">Schedules</Label>
+        <Label className="mb-4 block text-sm font-semibold">
+          Schedules <span className="text-red-500">*</span>
+        </Label>
+        {errors.schedules && (
+          <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-md">
+            <p className="text-sm text-red-600">{errors.schedules}</p>
+          </div>
+        )}
         <div className="space-y-4">
           {schedules.map((schedule) => (
             <div key={schedule.id} className="border rounded-lg p-4 space-y-3">

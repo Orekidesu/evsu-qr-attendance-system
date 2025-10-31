@@ -67,6 +67,80 @@ export function SubjectsPageContent() {
     useState<SubjectWithDetails | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // Validation function to check for conflicts
+  const validateSubject = (
+    formData: {
+      courseCode: string;
+      title: string;
+      program: string;
+      teacher: string;
+      schedules: Array<{
+        id: string;
+        days: string[];
+        startTime: string;
+        endTime: string;
+      }>;
+    },
+    editingSubjectId?: string
+  ): string | null => {
+    // Check for duplicate course code
+    const duplicateCourseCode = subjects.find(
+      (s) =>
+        s.course_code.toLowerCase() === formData.courseCode.toLowerCase() &&
+        s.id !== editingSubjectId
+    );
+    if (duplicateCourseCode) {
+      return `Course code "${formData.courseCode}" already exists. Please use a different course code.`;
+    }
+
+    // Check for teacher schedule conflicts
+    const teacherSubjects = subjects.filter(
+      (s) => s.teacher_id === formData.teacher && s.id !== editingSubjectId
+    );
+
+    for (const schedule of formData.schedules) {
+      for (const teacherSubject of teacherSubjects) {
+        for (const existingSchedule of teacherSubject.schedules || []) {
+          // Check if there's any day overlap
+          const dayOverlap = schedule.days.some((day) =>
+            existingSchedule.days.includes(day)
+          );
+
+          if (dayOverlap) {
+            // Check if times overlap
+            const newStart = schedule.startTime;
+            const newEnd = schedule.endTime;
+            const existingStart = existingSchedule.time_start;
+            const existingEnd = existingSchedule.time_end;
+
+            const timeOverlap =
+              (newStart >= existingStart && newStart < existingEnd) ||
+              (newEnd > existingStart && newEnd <= existingEnd) ||
+              (newStart <= existingStart && newEnd >= existingEnd);
+
+            if (timeOverlap) {
+              const conflictDays = schedule.days.filter((day) =>
+                existingSchedule.days.includes(day)
+              );
+              const teacherName = teachers.find(
+                (t) => t.id === formData.teacher
+              );
+              return `Schedule conflict detected! Teacher ${
+                teacherName
+                  ? `${teacherName.first_name} ${teacherName.last_name}`
+                  : "selected"
+              } already has a class on ${conflictDays.join(
+                ", "
+              )} from ${existingStart} to ${existingEnd} (${teacherSubject.course_code}).`;
+            }
+          }
+        }
+      }
+    }
+
+    return null;
+  };
+
   // Filter logic with useMemo for performance
   const filteredSubjects = useMemo(() => {
     let filtered = subjects;
@@ -103,6 +177,14 @@ export function SubjectsPageContent() {
     }>;
   }) => {
     setActionError(null);
+
+    // Validate before submitting
+    const validationError = validateSubject(formData);
+    if (validationError) {
+      setActionError(validationError);
+      return;
+    }
+
     try {
       await addSubject({
         course_code: formData.courseCode,
@@ -116,6 +198,7 @@ export function SubjectsPageContent() {
         })),
       });
       setIsCreateOpen(false);
+      setActionError(null);
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to create subject";
@@ -138,6 +221,14 @@ export function SubjectsPageContent() {
   }) => {
     if (!selectedSubject) return;
     setActionError(null);
+
+    // Validate before submitting
+    const validationError = validateSubject(formData, selectedSubject.id);
+    if (validationError) {
+      setActionError(validationError);
+      return;
+    }
+
     try {
       await editSubject(selectedSubject.id, {
         course_code: formData.courseCode,
@@ -152,6 +243,7 @@ export function SubjectsPageContent() {
       });
       setIsEditOpen(false);
       setSelectedSubject(null);
+      setActionError(null);
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to update subject";
