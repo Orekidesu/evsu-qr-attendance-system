@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Trash2, Plus } from "lucide-react";
+import type { Program } from "@/lib/types/program";
+import type { User } from "@/lib/types/user";
 
 interface Schedule {
   id: string;
@@ -21,21 +23,23 @@ interface Schedule {
   endTime: string;
 }
 
-interface SubjectFormProps {
-  initialData?: any;
-  onSubmit: (data: any) => void;
-  onCancel: () => void;
-  isEdit?: boolean;
+interface SubjectFormData {
+  courseCode: string;
+  title: string;
+  program: string;
+  teacher: string;
+  schedules: Schedule[];
 }
 
-const PROGRAMS = ["BS IT", "BS CS", "BA English", "BS Business", "BA History"];
-const TEACHERS = [
-  "Dr. Ahmed Khan",
-  "Prof. Sarah Smith",
-  "Mr. John Doe",
-  "Mrs. Emily Johnson",
-  "Dr. Lisa Anderson",
-];
+interface SubjectFormProps {
+  initialData?: SubjectFormData;
+  onSubmit: (data: SubjectFormData) => void;
+  onCancel: () => void;
+  isEdit?: boolean;
+  programs: Program[];
+  teachers: User[];
+}
+
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export default function SubjectForm({
@@ -43,6 +47,8 @@ export default function SubjectForm({
   onSubmit,
   onCancel,
   isEdit,
+  programs,
+  teachers,
 }: SubjectFormProps) {
   const [courseCode, setCourseCode] = useState(initialData?.courseCode || "");
   const [title, setTitle] = useState(initialData?.title || "");
@@ -154,9 +160,9 @@ export default function SubjectForm({
               <SelectValue placeholder="Choose a program" />
             </SelectTrigger>
             <SelectContent>
-              {PROGRAMS.map((p) => (
-                <SelectItem key={p} value={p}>
-                  {p}
+              {programs.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.abbreviation}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -171,9 +177,9 @@ export default function SubjectForm({
               <SelectValue placeholder="Choose a teacher" />
             </SelectTrigger>
             <SelectContent>
-              {TEACHERS.map((t) => (
-                <SelectItem key={t} value={t}>
-                  {t}
+              {teachers.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.first_name} {t.last_name}
                 </SelectItem>
               ))}
             </SelectContent>
