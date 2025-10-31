@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 import {
   Dialog,
@@ -7,14 +7,27 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertTriangle } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import type { TeacherWithDetails } from "@/hooks/useTeachersData";
 
-export function DeleteTeacherModal({ open, onOpenChange, teacher, onDelete }) {
-  if (!teacher) return null
+interface DeleteTeacherModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  teacher: TeacherWithDetails;
+  onDelete: () => void;
+}
+
+export function DeleteTeacherModal({
+  open,
+  onOpenChange,
+  teacher,
+  onDelete,
+}: DeleteTeacherModalProps) {
+  if (!teacher) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -29,26 +42,32 @@ export function DeleteTeacherModal({ open, onOpenChange, teacher, onDelete }) {
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Confirm Deletion</AlertTitle>
             <AlertDescription>
-              Are you sure you want to delete {teacher.firstName} {teacher.lastName}? This teacher will be removed from
-              all assigned subjects.
+              Are you sure you want to delete {teacher.first_name}{" "}
+              {teacher.last_name}?
+              {teacher.assignedSubjectsDetails.length > 0 &&
+                " This teacher is currently assigned to subjects and must be reassigned first."}
             </AlertDescription>
           </Alert>
 
           <div className="bg-muted p-4 rounded-lg">
-            <p className="text-sm text-muted-foreground mb-2">Teacher to be deleted:</p>
+            <p className="text-sm text-muted-foreground mb-2">
+              Teacher to be deleted:
+            </p>
             <p className="font-medium">
-              {teacher.firstName} {teacher.lastName}
+              {teacher.first_name} {teacher.last_name}
             </p>
             <p className="text-sm text-muted-foreground">{teacher.email}</p>
           </div>
 
-          {teacher.assignedSubjects.length > 0 && (
+          {teacher.assignedSubjectsDetails.length > 0 && (
             <div className="bg-yellow-50 dark:bg-yellow-950 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
-              <p className="text-sm text-muted-foreground mb-2">Assigned Subjects (will be unassigned):</p>
+              <p className="text-sm text-muted-foreground mb-2">
+                Assigned Subjects:
+              </p>
               <div className="flex gap-1 flex-wrap">
-                {teacher.assignedSubjects.map((subject) => (
-                  <Badge key={subject} variant="outline">
-                    {subject}
+                {teacher.assignedSubjectsDetails.map((subject) => (
+                  <Badge key={subject.id} variant="outline">
+                    {subject.courseCode}
                   </Badge>
                 ))}
               </div>
@@ -66,5 +85,5 @@ export function DeleteTeacherModal({ open, onOpenChange, teacher, onDelete }) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }
