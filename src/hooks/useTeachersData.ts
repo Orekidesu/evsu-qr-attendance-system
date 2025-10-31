@@ -6,9 +6,9 @@ import {
   updateUser,
   deleteUser,
 } from "@/lib/firebase/firestore";
-import { createUser } from "@/lib/firebase/auth";
 import { getAllSubjects } from "@/lib/firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
+import { auth } from "@/lib/firebase/config";
 import type { User } from "@/lib/types/user";
 import type { Subject } from "@/lib/types/subject";
 
@@ -98,12 +98,36 @@ export function useTeachersData() {
       if (!user) throw new Error("User not authenticated");
 
       try {
-        await createUser(data.email, data.password, {
-          first_name: data.firstName,
-          last_name: data.lastName,
-          role: "teacher",
-          assigned_subjects: [],
+        // Get the current user's ID token
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+          throw new Error("No authenticated user found");
+        }
+
+        const idToken = await currentUser.getIdToken();
+
+        // Call the API route to create the teacher (server-side)
+        const response = await fetch("/api/admin/users", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({
+            email: data.email,
+            password: data.password,
+            first_name: data.firstName,
+            last_name: data.lastName,
+            role: "teacher",
+          }),
         });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to create teacher");
+        }
+
+        // Refresh the teachers list
         await fetchData();
       } catch (err) {
         const errorMessage =

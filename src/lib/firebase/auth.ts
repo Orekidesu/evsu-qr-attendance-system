@@ -19,6 +19,7 @@ import type { User, CreateUserInput } from "../types/user";
 
 /**
  * Create a new user in Firebase Auth and Firestore
+ * Note: This will temporarily sign in as the new user, then sign back in as admin
  */
 export async function createUser(
   email: string,
@@ -26,7 +27,10 @@ export async function createUser(
   userData: Omit<CreateUserInput, "email">
 ): Promise<User> {
   try {
-    // Create auth user
+    // Get current user to restore session later
+    const currentUser = auth.currentUser;
+
+    // Create auth user (this will automatically sign in as the new user)
     const userCredential = await createUserWithEmailAndPassword(
       auth,
       email,
@@ -34,7 +38,7 @@ export async function createUser(
     );
     const { uid } = userCredential.user;
 
-    // Create Firestore document
+    // Create Firestore document while signed in as new user
     const userDoc: Omit<User, "id" | "created_at"> & {
       created_at: FieldValue;
     } = {
@@ -56,6 +60,12 @@ export async function createUser(
     }
 
     await setDoc(doc(db, "users", uid), userDoc);
+
+    // Sign out the newly created user
+    await firebaseSignOut(auth);
+
+    // Note: The admin will need to sign back in
+    // This is a limitation of the client SDK - ideally use Firebase Admin SDK on the backend
 
     return {
       id: uid,

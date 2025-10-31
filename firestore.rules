@@ -30,8 +30,8 @@ service cloud.firestore {
     match /users/{userId} {
       // Users can read their own document, admins can read all
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      // Admin can create any user
-      allow create: if isAdmin();
+      // Admin can create any user, or a user can be created with the same UID as the auth user
+      allow create: if (isSignedIn() && request.auth.uid == userId) || isAdmin();
       // Admin can update any user, users can update their own profile (but not role)
       allow update: if isAdmin() || 
                       (isSignedIn() && request.auth.uid == userId && 

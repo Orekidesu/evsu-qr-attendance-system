@@ -73,7 +73,7 @@ export default function TeachersPage() {
       await addTeacher(newTeacher);
       setAddModalOpen(false);
       toast.success("Teacher Added", {
-        description: `${newTeacher.firstName} ${newTeacher.lastName} has been successfully added.`,
+        description: `${newTeacher.firstName} ${newTeacher.lastName} has been successfully created.`,
       });
     } catch (err) {
       const errorMessage =
