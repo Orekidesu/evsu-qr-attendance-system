@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,7 +26,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   MoreHorizontal,
   Plus,
@@ -33,7 +33,6 @@ import {
   Eye,
   Edit2,
   Loader2,
-  AlertCircle,
 } from "lucide-react";
 import SubjectForm from "@/components/admin/subjects/subject-form";
 import SubjectDetailsModal from "@/components/admin/subjects/subject-details-modal";
@@ -65,7 +64,17 @@ export function SubjectsPageContent() {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedSubject, setSelectedSubject] =
     useState<SubjectWithDetails | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+
+  // Show error toast when data loading fails
+  useEffect(() => {
+    if (error) {
+      toast.error("Failed to Load Data", {
+        description: error.includes("authentication")
+          ? "Please make sure you are logged in and try refreshing the page."
+          : error,
+      });
+    }
+  }, [error]);
 
   // Validation function to check for conflicts
   const validateSubject = (
@@ -176,12 +185,12 @@ export function SubjectsPageContent() {
       endTime: string;
     }>;
   }) => {
-    setActionError(null);
-
     // Validate before submitting
     const validationError = validateSubject(formData);
     if (validationError) {
-      setActionError(validationError);
+      toast.error("Validation Error", {
+        description: validationError,
+      });
       return;
     }
 
@@ -198,12 +207,15 @@ export function SubjectsPageContent() {
         })),
       });
       setIsCreateOpen(false);
-      setActionError(null);
+      toast.success("Subject Created", {
+        description: `${formData.courseCode} has been successfully created.`,
+      });
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to create subject";
-      setActionError(errorMessage);
-      throw err;
+      toast.error("Error", {
+        description: errorMessage,
+      });
     }
   };
 
@@ -220,12 +232,13 @@ export function SubjectsPageContent() {
     }>;
   }) => {
     if (!selectedSubject) return;
-    setActionError(null);
 
     // Validate before submitting
     const validationError = validateSubject(formData, selectedSubject.id);
     if (validationError) {
-      setActionError(validationError);
+      toast.error("Validation Error", {
+        description: validationError,
+      });
       return;
     }
 
@@ -243,27 +256,34 @@ export function SubjectsPageContent() {
       });
       setIsEditOpen(false);
       setSelectedSubject(null);
-      setActionError(null);
+      toast.success("Subject Updated", {
+        description: `${formData.courseCode} has been successfully updated.`,
+      });
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to update subject";
-      setActionError(errorMessage);
-      throw err;
+      toast.error("Error", {
+        description: errorMessage,
+      });
     }
   };
 
   const handleDelete = async () => {
     if (!selectedSubject) return;
-    setActionError(null);
     try {
+      const courseCode = selectedSubject.course_code;
       await removeSubject(selectedSubject.id);
       setIsDeleteOpen(false);
       setSelectedSubject(null);
+      toast.success("Subject Deleted", {
+        description: `${courseCode} has been successfully deleted.`,
+      });
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to delete subject";
-      setActionError(errorMessage);
-      throw err;
+      toast.error("Error", {
+        description: errorMessage,
+      });
     }
   };
 
@@ -312,25 +332,6 @@ export function SubjectsPageContent() {
           Create New Subject
         </Button>
       </div>
-
-      {/* Error Alert */}
-      {(error || actionError) && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>
-            {error || actionError}
-            {error && error.includes("authentication") && (
-              <div className="mt-2">
-                <p className="text-sm">
-                  Please make sure you are logged in and try refreshing the
-                  page.
-                </p>
-              </div>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
 
       {/* Filters and Search */}
       <Card>
