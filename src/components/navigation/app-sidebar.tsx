@@ -41,8 +41,8 @@ const navMain = [
     icon: BookOpen,
   },
   {
-    title: "Users",
-    url: "/admin/users",
+    title: "Teacher Management",
+    url: "/admin/teachers",
     icon: Users,
   },
   {
