@@ -19,17 +19,3 @@ export interface CreateAttendanceInput {
   status: AttendanceStatus;
   schedule: Schedule;
 }
-
-export interface Enrollment {
-  id: string;
-  student_id: string;
-  subject_id: string;
-  program_id: string;
-  enrolled_at: Timestamp;
-}
-
-export interface CreateEnrollmentInput {
-  student_id: string;
-  subject_id: string;
-  program_id: string;
-}
