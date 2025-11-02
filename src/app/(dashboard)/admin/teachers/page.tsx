@@ -40,6 +40,9 @@ export default function TeachersPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [selectedTeacher, setSelectedTeacher] =
     useState<TeacherWithDetails | null>(null);
+  const [isAddingTeacher, setIsAddingTeacher] = useState(false);
+  const [isEditingTeacher, setIsEditingTeacher] = useState(false);
+  const [isDeletingTeacher, setIsDeletingTeacher] = useState(false);
 
   // Show error toast when data loading fails
   useEffect(() => {
@@ -51,6 +54,19 @@ export default function TeachersPage() {
       });
     }
   }, [error]);
+
+  // Keyboard shortcut: Ctrl/Cmd + K to focus search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        document.getElementById("teacher-search")?.focus();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const filteredTeachers = useMemo(() => {
     return teachers.filter((teacher) => {
@@ -69,6 +85,7 @@ export default function TeachersPage() {
     email: string;
     password: string;
   }) => {
+    setIsAddingTeacher(true);
     try {
       await addTeacher(newTeacher);
       setAddModalOpen(false);
@@ -81,6 +98,8 @@ export default function TeachersPage() {
       toast.error("Error", {
         description: errorMessage,
       });
+    } finally {
+      setIsAddingTeacher(false);
     }
   };
 
@@ -89,6 +108,7 @@ export default function TeachersPage() {
     first_name: string;
     last_name: string;
   }) => {
+    setIsEditingTeacher(true);
     try {
       await editTeacher(updatedData.id, {
         first_name: updatedData.first_name,
@@ -105,11 +125,14 @@ export default function TeachersPage() {
       toast.error("Error", {
         description: errorMessage,
       });
+    } finally {
+      setIsEditingTeacher(false);
     }
   };
 
   const handleDeleteTeacher = async () => {
     if (!selectedTeacher) return;
+    setIsDeletingTeacher(true);
     try {
       const teacherName = `${selectedTeacher.first_name} ${selectedTeacher.last_name}`;
       await removeTeacher(selectedTeacher.id);
@@ -124,6 +147,8 @@ export default function TeachersPage() {
       toast.error("Error", {
         description: errorMessage,
       });
+    } finally {
+      setIsDeletingTeacher(false);
     }
   };
   return (
@@ -152,7 +177,8 @@ export default function TeachersPage() {
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search by name or email..."
+                id="teacher-search"
+                placeholder="Search by name or email... (Ctrl+K)"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
@@ -287,6 +313,7 @@ export default function TeachersPage() {
           open={addModalOpen}
           onOpenChange={setAddModalOpen}
           onAdd={handleAddTeacher}
+          isSubmitting={isAddingTeacher}
         />
         {selectedTeacher && (
           <>
@@ -295,6 +322,7 @@ export default function TeachersPage() {
               onOpenChange={setEditModalOpen}
               teacher={selectedTeacher}
               onEdit={handleEditTeacher}
+              isSubmitting={isEditingTeacher}
             />
             <ViewTeacherModal
               open={viewModalOpen}
@@ -306,6 +334,7 @@ export default function TeachersPage() {
               onOpenChange={setDeleteModalOpen}
               teacher={selectedTeacher}
               onDelete={handleDeleteTeacher}
+              isDeleting={isDeletingTeacher}
             />
           </>
         )}

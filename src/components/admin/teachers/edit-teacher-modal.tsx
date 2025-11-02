@@ -12,13 +12,19 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Loader2 } from "lucide-react";
 import type { TeacherWithDetails } from "@/hooks/useTeachersData";
 
 interface EditTeacherModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   teacher: TeacherWithDetails;
-  onEdit: (data: { id: string; first_name: string; last_name: string }) => void;
+  onEdit: (data: {
+    id: string;
+    first_name: string;
+    last_name: string;
+  }) => Promise<void>;
+  isSubmitting?: boolean;
 }
 
 export function EditTeacherModal({
@@ -26,6 +32,7 @@ export function EditTeacherModal({
   onOpenChange,
   teacher,
   onEdit,
+  isSubmitting = false,
 }: EditTeacherModalProps) {
   const [firstName, setFirstName] = useState(teacher.first_name);
   const [lastName, setLastName] = useState(teacher.last_name);
@@ -61,11 +68,19 @@ export function EditTeacherModal({
     });
   };
 
+  // Handle Enter key press
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !isSubmitting) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+
   if (!teacher) return null;
 
   return (
     <Dialog key={teacher.id} open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md" onKeyDown={handleKeyDown}>
         <DialogHeader>
           <DialogTitle>Edit Teacher</DialogTitle>
           <DialogDescription>Update teacher information</DialogDescription>
@@ -87,6 +102,7 @@ export function EditTeacherModal({
                   }
                 }}
                 className={errors.firstName ? "border-red-500" : ""}
+                disabled={isSubmitting}
               />
               {errors.firstName && (
                 <p className="text-sm text-red-500">{errors.firstName}</p>
@@ -106,6 +122,7 @@ export function EditTeacherModal({
                   }
                 }}
                 className={errors.lastName ? "border-red-500" : ""}
+                disabled={isSubmitting}
               />
               {errors.lastName && (
                 <p className="text-sm text-red-500">{errors.lastName}</p>
@@ -153,10 +170,23 @@ export function EditTeacherModal({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isSubmitting}
+          >
             Cancel
           </Button>
-          <Button onClick={handleSubmit}>Save Changes</Button>
+          <Button onClick={handleSubmit} disabled={isSubmitting}>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Save Changes"
+            )}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

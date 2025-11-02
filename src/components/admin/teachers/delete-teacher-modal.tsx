@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { TeacherWithDetails } from "@/hooks/useTeachersData";
 
@@ -18,7 +18,8 @@ interface DeleteTeacherModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   teacher: TeacherWithDetails;
-  onDelete: () => void;
+  onDelete: () => Promise<void>;
+  isDeleting?: boolean;
 }
 
 export function DeleteTeacherModal({
@@ -26,6 +27,7 @@ export function DeleteTeacherModal({
   onOpenChange,
   teacher,
   onDelete,
+  isDeleting = false,
 }: DeleteTeacherModalProps) {
   if (!teacher) return null;
 
@@ -76,11 +78,26 @@ export function DeleteTeacherModal({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isDeleting}
+          >
             Cancel
           </Button>
-          <Button variant="destructive" onClick={onDelete}>
-            Delete Teacher
+          <Button
+            variant="destructive"
+            onClick={onDelete}
+            disabled={isDeleting}
+          >
+            {isDeleting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Deleting...
+              </>
+            ) : (
+              "Delete Teacher"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

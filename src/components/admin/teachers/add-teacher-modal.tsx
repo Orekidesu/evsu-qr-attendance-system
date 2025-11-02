@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Loader2 } from "lucide-react";
 
 interface AddTeacherModalProps {
   open: boolean;
@@ -21,13 +22,15 @@ interface AddTeacherModalProps {
     lastName: string;
     email: string;
     password: string;
-  }) => void;
+  }) => Promise<void>;
+  isSubmitting?: boolean;
 }
 
 export function AddTeacherModal({
   open,
   onOpenChange,
   onAdd,
+  isSubmitting = false,
 }: AddTeacherModalProps) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -87,9 +90,30 @@ export function AddTeacherModal({
     setErrors({});
   };
 
+  // Reset form when modal closes
+  const handleOpenChange = (open: boolean) => {
+    if (!open && !isSubmitting) {
+      // Reset form when closing
+      setFirstName("");
+      setLastName("");
+      setEmail("");
+      setPassword("password123");
+      setErrors({});
+    }
+    onOpenChange(open);
+  };
+
+  // Handle Enter key press
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !isSubmitting) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="max-w-md" onKeyDown={handleKeyDown}>
         <DialogHeader>
           <DialogTitle>Add New Teacher</DialogTitle>
           <DialogDescription>Create a new teacher account</DialogDescription>
@@ -112,6 +136,7 @@ export function AddTeacherModal({
                   }
                 }}
                 className={errors.firstName ? "border-red-500" : ""}
+                disabled={isSubmitting}
               />
               {errors.firstName && (
                 <p className="text-sm text-red-500">{errors.firstName}</p>
@@ -132,6 +157,7 @@ export function AddTeacherModal({
                   }
                 }}
                 className={errors.lastName ? "border-red-500" : ""}
+                disabled={isSubmitting}
               />
               {errors.lastName && (
                 <p className="text-sm text-red-500">{errors.lastName}</p>
@@ -155,6 +181,7 @@ export function AddTeacherModal({
                 }
               }}
               className={errors.email ? "border-red-500" : ""}
+              disabled={isSubmitting}
             />
             {errors.email && (
               <p className="text-sm text-red-500">{errors.email}</p>
@@ -176,6 +203,7 @@ export function AddTeacherModal({
                 }
               }}
               className={errors.password ? "border-red-500" : ""}
+              disabled={isSubmitting}
             />
             {errors.password && (
               <p className="text-sm text-red-500">{errors.password}</p>
@@ -187,10 +215,23 @@ export function AddTeacherModal({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="outline"
+            onClick={() => handleOpenChange(false)}
+            disabled={isSubmitting}
+          >
             Cancel
           </Button>
-          <Button onClick={handleSubmit}>Add Teacher</Button>
+          <Button onClick={handleSubmit} disabled={isSubmitting}>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              "Add Teacher"
+            )}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
