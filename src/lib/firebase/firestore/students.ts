@@ -17,12 +17,24 @@ import type { Student, CreateStudentInput } from "../../types";
 export const createStudent = async (
   data: CreateStudentInput
 ): Promise<string> => {
-  // Auto-generate QR code if not provided
-  const qrCode = data.qr_code || data.student_id; // or use encryption logic
+  // Validate that QR code is provided and properly formatted
+  if (!data.qr_code) {
+    throw new Error(
+      "QR code is required. Please ensure the QR generation service is working."
+    );
+  }
+
+  // Validate QR code format (should be EVSU:STU:xxx:xxx)
+  const qrParts = data.qr_code.split(":");
+  if (qrParts.length !== 4 || qrParts[0] !== "EVSU" || qrParts[1] !== "STU") {
+    throw new Error(
+      `Invalid QR code format. Expected 'EVSU:STU:xxx:xxx', got '${data.qr_code}'`
+    );
+  }
 
   const docRef = await addDoc(collection(db, "students"), {
     ...data,
-    qr_code: qrCode,
+    qr_code: data.qr_code,
     created_at: serverTimestamp(),
   });
   return docRef.id;

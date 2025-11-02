@@ -124,6 +124,11 @@ export function useStudentsData() {
       }
 
       try {
+        // console.log(
+        //   "[QR Generation] Starting for student:",
+        //   studentData.student_id
+        // );
+
         // Generate secure QR code via API route
         const qrResponse = await fetch("/api/qr/generate", {
           method: "POST",
@@ -131,20 +136,50 @@ export function useStudentsData() {
           body: JSON.stringify({ studentId: studentData.student_id }),
         });
 
+        // console.log("[QR Generation] API Response Status:", qrResponse.status);
+
         if (!qrResponse.ok) {
-          throw new Error("Failed to generate QR code");
+          const errorData = await qrResponse.json().catch(() => ({}));
+          console.error("[QR Generation] API Error:", errorData);
+          throw new Error(
+            errorData.error ||
+              `QR generation failed with status ${qrResponse.status}`
+          );
         }
 
-        const { qrCode } = await qrResponse.json();
+        const responseData = await qrResponse.json();
+        // console.log("[QR Generation] API Response:", responseData);
+
+        if (!responseData.success || !responseData.qrCode) {
+          throw new Error(
+            responseData.error || "QR code generation returned invalid response"
+          );
+        }
+
+        const qrCode = responseData.qrCode;
+        // console.log("[QR Generation] Generated QR Code:", qrCode);
+
+        // Validate QR code format before saving
+        if (!qrCode.startsWith("EVSU:STU:")) {
+          throw new Error(
+            `Invalid QR code format received: ${qrCode}. Expected format: EVSU:STU:xxx:xxx`
+          );
+        }
 
         // Create student with generated QR code
+        // console.log(
+        //   "[Student Creation] Creating student with QR code:",
+        //   qrCode
+        // );
         await createStudent({
           ...studentData,
           qr_code: qrCode,
         });
 
+        // console.log("[Student Creation] Success! Refreshing data...");
         await fetchData(); // Refresh the list
       } catch (err) {
+        console.error("[Student Creation] Error:", err);
         const errorMessage =
           err instanceof Error ? err.message : "Failed to create student";
         throw new Error(errorMessage);
