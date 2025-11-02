@@ -5,8 +5,11 @@ import {
   Command,
   Settings,
   Users,
+  GraduationCap,
+  LibraryBig,
   BookOpen,
   LayoutDashboard,
+  NotebookPen,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
@@ -38,12 +41,22 @@ const navMain = [
   {
     title: "Subjects",
     url: "/admin/subjects",
-    icon: BookOpen,
+    icon: LibraryBig,
   },
   {
     title: "Teacher Management",
     url: "/admin/teachers",
     icon: Users,
+  },
+  {
+    title: "Student Management",
+    url: "/admin/students",
+    icon: GraduationCap,
+  },
+  {
+    title: "Enrollments",
+    url: "/admin/enrollments",
+    icon: NotebookPen,
   },
   {
     title: "Settings",

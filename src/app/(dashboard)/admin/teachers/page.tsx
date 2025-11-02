@@ -3,7 +3,7 @@ import { AdminLayout } from "@/components/layouts/AdminLayout";
 
 export default function TeachersPage() {
   return (
-    <AdminLayout breadcrumbs={[{ label: "Users" }]}>
+    <AdminLayout breadcrumbs={[{ label: "Teachers" }]}>
       <TeachersPageContent />
     </AdminLayout>
   );

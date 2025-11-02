@@ -38,6 +38,7 @@ interface SubjectFormProps {
   isEdit?: boolean;
   programs: Program[];
   teachers: User[];
+  isSubmitting?: boolean;
 }
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -49,6 +50,7 @@ export default function SubjectForm({
   isEdit,
   programs,
   teachers,
+  isSubmitting = false,
 }: SubjectFormProps) {
   const [courseCode, setCourseCode] = useState(initialData?.courseCode || "");
   const [title, setTitle] = useState(initialData?.title || "");
@@ -213,8 +215,15 @@ export default function SubjectForm({
     });
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" onKeyDown={handleKeyDown}>
       {/* Course Code and Title */}
       <div className="grid gap-4 md:grid-cols-2">
         <div>
@@ -229,12 +238,14 @@ export default function SubjectForm({
             placeholder="e.g., IT101"
             value={courseCode}
             onChange={(e) => {
-              setCourseCode(e.target.value);
+              setCourseCode(e.target.value.toUpperCase());
               if (errors.courseCode) {
                 setErrors({ ...errors, courseCode: undefined });
               }
             }}
             className={errors.courseCode ? "border-red-500" : ""}
+            disabled={isSubmitting}
+            maxLength={20}
           />
           {errors.courseCode && (
             <p className="text-sm text-red-500 mt-1">{errors.courseCode}</p>
@@ -255,6 +266,8 @@ export default function SubjectForm({
               }
             }}
             className={errors.title ? "border-red-500" : ""}
+            disabled={isSubmitting}
+            maxLength={100}
           />
           {errors.title && (
             <p className="text-sm text-red-500 mt-1">{errors.title}</p>
@@ -268,7 +281,11 @@ export default function SubjectForm({
           <Label htmlFor="program" className="mb-2 block text-sm font-semibold">
             Select Program <span className="text-red-500">*</span>
           </Label>
-          <Select value={program} onValueChange={setProgram}>
+          <Select
+            value={program}
+            onValueChange={setProgram}
+            disabled={isSubmitting}
+          >
             <SelectTrigger>
               <SelectValue placeholder="Choose a program" />
             </SelectTrigger>
@@ -296,6 +313,7 @@ export default function SubjectForm({
                 setErrors({ ...errors, teacher: undefined });
               }
             }}
+            disabled={isSubmitting}
           >
             <SelectTrigger>
               <SelectValue placeholder="Choose a teacher" />
@@ -339,6 +357,7 @@ export default function SubjectForm({
                         onCheckedChange={() =>
                           handleScheduleDayToggle(schedule.id, day)
                         }
+                        disabled={isSubmitting}
                       />
                       <label
                         htmlFor={`day-${schedule.id}-${day}`}
@@ -371,7 +390,8 @@ export default function SubjectForm({
                         e.target.value
                       )
                     }
-                    className="w-full px-3 py-2 border rounded-md text-sm"
+                    className="w-full px-3 py-2 border rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isSubmitting}
                   />
                 </div>
                 <div>
@@ -392,7 +412,8 @@ export default function SubjectForm({
                         e.target.value
                       )
                     }
-                    className="w-full px-3 py-2 border rounded-md text-sm"
+                    className="w-full px-3 py-2 border rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isSubmitting}
                   />
                 </div>
               </div>
@@ -403,6 +424,7 @@ export default function SubjectForm({
                 size="sm"
                 onClick={() => handleRemoveSchedule(schedule.id)}
                 className="w-full gap-2"
+                disabled={isSubmitting}
               >
                 <Trash2 className="w-4 h-4" />
                 Remove Schedule
@@ -414,6 +436,7 @@ export default function SubjectForm({
             variant="outline"
             onClick={handleAddSchedule}
             className="w-full gap-2 bg-transparent"
+            disabled={isSubmitting}
           >
             <Plus className="w-4 h-4" />
             Add Another Schedule
@@ -423,11 +446,18 @@ export default function SubjectForm({
 
       {/* Buttons */}
       <div className="flex gap-2 justify-end pt-4">
-        <Button variant="outline" onClick={onCancel}>
+        <Button variant="outline" onClick={onCancel} disabled={isSubmitting}>
           Cancel
         </Button>
-        <Button onClick={handleSubmit}>
-          {isEdit ? "Update Subject" : "Create Subject"}
+        <Button onClick={handleSubmit} disabled={isSubmitting}>
+          {isSubmitting ? (
+            <>
+              <span className="inline-block animate-spin mr-2">⏳</span>
+              {isEdit ? "Updating..." : "Creating..."}
+            </>
+          ) : (
+            <>{isEdit ? "Update Subject" : "Create Subject"}</>
+          )}
         </Button>
       </div>
     </div>
