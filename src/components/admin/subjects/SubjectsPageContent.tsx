@@ -334,6 +334,8 @@ export function SubjectsPageContent() {
     title: subject.descriptive_title,
     program: subject.program_id,
     teacher: subject.teacher_id,
+    programName: subject.programName,
+    teacherName: subject.teacherName,
     schedules: (subject.schedules || []).map((s, index) => ({
       id: `schedule-${index}`,
       days: s.days || [],
