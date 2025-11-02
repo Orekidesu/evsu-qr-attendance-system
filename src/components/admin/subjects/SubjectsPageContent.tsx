@@ -65,6 +65,9 @@ export function SubjectsPageContent() {
   const [selectedSubject, setSelectedSubject] =
     useState<SubjectWithDetails | null>(null);
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Show error toast when data loading fails
   useEffect(() => {
     if (error) {
@@ -75,6 +78,19 @@ export function SubjectsPageContent() {
       });
     }
   }, [error]);
+
+  // Keyboard shortcut: Ctrl+K to focus search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        document.getElementById("subjects-search")?.focus();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Validation function to check for conflicts
   const validateSubject = (
@@ -194,6 +210,7 @@ export function SubjectsPageContent() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       await addSubject({
         course_code: formData.courseCode,
@@ -216,6 +233,8 @@ export function SubjectsPageContent() {
       toast.error("Error", {
         description: errorMessage,
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -242,6 +261,7 @@ export function SubjectsPageContent() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       await editSubject(selectedSubject.id, {
         course_code: formData.courseCode,
@@ -265,11 +285,14 @@ export function SubjectsPageContent() {
       toast.error("Error", {
         description: errorMessage,
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleDelete = async () => {
     if (!selectedSubject) return;
+    setIsDeleting(true);
     try {
       const courseCode = selectedSubject.course_code;
       await removeSubject(selectedSubject.id);
@@ -284,6 +307,8 @@ export function SubjectsPageContent() {
       toast.error("Error", {
         description: errorMessage,
       });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -342,7 +367,8 @@ export function SubjectsPageContent() {
                 Search by Code or Title
               </Label>
               <Input
-                placeholder="Search..."
+                id="subjects-search"
+                placeholder="Search... (Ctrl+K)"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 disabled={isLoading}
@@ -451,10 +477,12 @@ export function SubjectsPageContent() {
                     {filteredSubjects.map((subject) => (
                       <tr
                         key={subject.id}
-                        className="border-b hover:bg-muted/50"
+                        className="border-b hover:bg-muted/50 transition-colors"
                       >
                         <td className="px-4 py-3 font-semibold">
-                          {subject.course_code}
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-primary/10 text-primary font-medium">
+                            {subject.course_code}
+                          </span>
                         </td>
                         <td className="px-4 py-3">
                           {subject.descriptive_title}
@@ -464,8 +492,13 @@ export function SubjectsPageContent() {
                         <td className="px-4 py-3 text-xs">
                           {subject.schedules && subject.schedules.length > 0 ? (
                             subject.schedules.map((s, idx) => (
-                              <div key={idx}>
-                                {s.days.join("/")} {s.time_start}-{s.time_end}
+                              <div key={idx} className="mb-1 last:mb-0">
+                                <span className="font-medium">
+                                  {s.days.join("/")}
+                                </span>{" "}
+                                <span className="text-muted-foreground">
+                                  {s.time_start}-{s.time_end}
+                                </span>
                               </div>
                             ))
                           ) : (
@@ -474,13 +507,19 @@ export function SubjectsPageContent() {
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-center">
+                        <td
+                          className={`px-4 py-3 text-center ${subject.enrolledCount > 0 ? "font-medium" : "text-muted-foreground"}`}
+                        >
                           {subject.enrolledCount}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                aria-label={`Actions for ${subject.course_code}`}
+                              >
                                 <MoreHorizontal className="w-4 h-4" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -520,7 +559,14 @@ export function SubjectsPageContent() {
       )}
 
       {/* Create Subject Modal */}
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+      <Dialog
+        open={isCreateOpen}
+        onOpenChange={(open) => {
+          if (!open && !isSubmitting) {
+            setIsCreateOpen(false);
+          }
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create New Subject</DialogTitle>
@@ -533,12 +579,21 @@ export function SubjectsPageContent() {
             onCancel={() => setIsCreateOpen(false)}
             programs={programs}
             teachers={teachers}
+            isSubmitting={isSubmitting}
           />
         </DialogContent>
       </Dialog>
 
       {/* Edit Subject Modal */}
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+      <Dialog
+        open={isEditOpen}
+        onOpenChange={(open) => {
+          if (!open && !isSubmitting) {
+            setIsEditOpen(false);
+            setSelectedSubject(null);
+          }
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Subject</DialogTitle>
@@ -552,6 +607,7 @@ export function SubjectsPageContent() {
               isEdit
               programs={programs}
               teachers={teachers}
+              isSubmitting={isSubmitting}
             />
           )}
         </DialogContent>
@@ -570,9 +626,15 @@ export function SubjectsPageContent() {
       {selectedSubject && (
         <DeleteConfirmationModal
           isOpen={isDeleteOpen}
-          onClose={() => setIsDeleteOpen(false)}
+          onClose={() => {
+            if (!isDeleting) {
+              setIsDeleteOpen(false);
+              setSelectedSubject(null);
+            }
+          }}
           onConfirm={handleDelete}
           subject={transformSubjectForDisplay(selectedSubject)}
+          isDeleting={isDeleting}
         />
       )}
     </div>
