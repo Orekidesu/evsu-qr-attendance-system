@@ -124,7 +124,25 @@ export function useStudentsData() {
       }
 
       try {
-        await createStudent(studentData);
+        // Generate secure QR code via API route
+        const qrResponse = await fetch("/api/qr/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ studentId: studentData.student_id }),
+        });
+
+        if (!qrResponse.ok) {
+          throw new Error("Failed to generate QR code");
+        }
+
+        const { qrCode } = await qrResponse.json();
+
+        // Create student with generated QR code
+        await createStudent({
+          ...studentData,
+          qr_code: qrCode,
+        });
+
         await fetchData(); // Refresh the list
       } catch (err) {
         const errorMessage =
@@ -193,6 +211,38 @@ export function useStudentsData() {
     [user, fetchData]
   );
 
+  const regenerateQRCode = useCallback(
+    async (studentId: string, firebaseDocId: string) => {
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+
+      try {
+        // Call API to regenerate QR code
+        const response = await fetch("/api/qr/regenerate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ studentId, firebaseDocId }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to regenerate QR code");
+        }
+
+        const { qrCode } = await response.json();
+
+        await fetchData(); // Refresh the list to show new QR code
+
+        return qrCode;
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to regenerate QR code";
+        throw new Error(errorMessage);
+      }
+    },
+    [user, fetchData]
+  );
+
   return {
     students,
     programs,
@@ -203,6 +253,7 @@ export function useStudentsData() {
     editStudent,
     removeStudent,
     enrollStudentInSubject,
+    regenerateQRCode,
     refreshData: fetchData,
   };
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,19 +12,24 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { QRCodeSVG } from "qrcode.react";
+import { RefreshCw } from "lucide-react";
 import type { StudentWithDetails } from "@/hooks/useStudentsData";
 
 interface ViewStudentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   student: StudentWithDetails;
+  onRegenerateQR?: (studentId: string, firebaseDocId: string) => Promise<void>;
 }
 
 export function ViewStudentModal({
   open,
   onOpenChange,
   student,
+  onRegenerateQR,
 }: ViewStudentModalProps) {
+  const [isRegenerating, setIsRegenerating] = useState(false);
+
   const handleDownloadPDF = () => {
     const element = document.getElementById(
       "qr-code-view"
@@ -73,6 +79,17 @@ export function ViewStudentModal({
     `);
     printWindow.document.close();
     printWindow.print();
+  };
+
+  const handleRegenerate = async () => {
+    if (!onRegenerateQR) return;
+
+    setIsRegenerating(true);
+    try {
+      await onRegenerateQR(student.student_id, student.id);
+    } finally {
+      setIsRegenerating(false);
+    }
   };
 
   return (
@@ -139,11 +156,38 @@ export function ViewStudentModal({
           )}
         </div>
 
-        <DialogFooter className="flex gap-2">
-          <Button variant="outline" onClick={handleDownloadPDF}>
+        <DialogFooter className="flex-col sm:flex-row gap-2">
+          {onRegenerateQR && (
+            <Button
+              variant="outline"
+              onClick={handleRegenerate}
+              disabled={isRegenerating}
+            >
+              {isRegenerating ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Regenerating...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Regenerate QR
+                </>
+              )}
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            onClick={handleDownloadPDF}
+            disabled={isRegenerating}
+          >
             Download QR
           </Button>
-          <Button variant="outline" onClick={handlePrint}>
+          <Button
+            variant="outline"
+            onClick={handlePrint}
+            disabled={isRegenerating}
+          >
             Print
           </Button>
         </DialogFooter>

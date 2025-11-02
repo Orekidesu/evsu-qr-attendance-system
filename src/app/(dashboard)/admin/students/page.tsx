@@ -26,6 +26,7 @@ export default function StudentPage() {
     addStudent,
     editStudent,
     removeStudent,
+    regenerateQRCode,
   } = useStudentsData();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProgram, setSelectedProgram] = useState("all");
@@ -183,6 +184,26 @@ export default function StudentPage() {
     setSelectedStudent(student);
     setDeleteModalOpen(true);
   };
+
+  const handleRegenerateQR = async (
+    studentId: string,
+    firebaseDocId: string
+  ) => {
+    try {
+      await regenerateQRCode(studentId, firebaseDocId);
+      toast.success("QR Code Regenerated", {
+        description: `New QR code has been generated for ${studentId}.`,
+      });
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to regenerate QR code";
+      toast.error("Error", {
+        description: errorMessage,
+      });
+      throw err; // Re-throw to let the modal handle loading state
+    }
+  };
+
   return (
     <AdminLayout breadcrumbs={[{ label: "Students" }]}>
       <div className="space-y-6">
@@ -254,6 +275,7 @@ export default function StudentPage() {
               open={viewModalOpen}
               onOpenChange={setViewModalOpen}
               student={selectedStudent}
+              onRegenerateQR={handleRegenerateQR}
             />
 
             <DeleteStudentModal
@@ -273,6 +295,7 @@ export default function StudentPage() {
               open={qrModalOpen}
               onOpenChange={setQrModalOpen}
               student={selectedStudent}
+              onRegenerateQR={handleRegenerateQR}
             />
           </>
         )}
