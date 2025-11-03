@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { regenerateQRCode } from "@/lib/qr/validator";
-import { updateStudent } from "@/lib/firebase/firestore/students";
+import { updateStudentAdmin } from "@/lib/firebase/firestore/students.admin";
 
 /**
  * POST /api/qr/regenerate
@@ -48,8 +48,8 @@ export async function POST(request: NextRequest) {
     // Regenerate QR code
     const newQRCode = regenerateQRCode(studentId);
 
-    // Update student record in Firestore
-    await updateStudent(firebaseDocId, { qr_code: newQRCode });
+    // Update student record in Firestore using Admin SDK
+    await updateStudentAdmin(firebaseDocId, { qr_code: newQRCode });
 
     return NextResponse.json({
       success: true,

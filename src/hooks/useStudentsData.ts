@@ -6,6 +6,7 @@ import {
   createStudent,
   updateStudent,
   deleteStudent,
+  checkStudentExists,
 } from "@/lib/firebase/firestore/students";
 import { getAllPrograms } from "@/lib/firebase/firestore/programs";
 import { getAllSubjects } from "@/lib/firebase/firestore/subjects";
@@ -124,10 +125,27 @@ export function useStudentsData() {
       }
 
       try {
-        // console.log(
-        //   "[QR Generation] Starting for student:",
-        //   studentData.student_id
-        // );
+        console.log("[Student Creation] Starting for:", studentData.student_id);
+
+        // Check for duplicates BEFORE generating QR code
+        const duplicateCheck = await checkStudentExists(
+          studentData.student_id,
+          studentData.email
+        );
+
+        if (duplicateCheck.exists) {
+          const field =
+            duplicateCheck.field === "student_id" ? "Student ID" : "Email";
+          const value =
+            duplicateCheck.field === "student_id"
+              ? studentData.student_id
+              : studentData.email;
+          throw new Error(
+            `${field} "${value}" is already registered. Each student must have a unique ID and email.`
+          );
+        }
+
+        console.log("[QR Generation] Starting...");
 
         // Generate secure QR code via API route
         const qrResponse = await fetch("/api/qr/generate", {
@@ -136,7 +154,7 @@ export function useStudentsData() {
           body: JSON.stringify({ studentId: studentData.student_id }),
         });
 
-        // console.log("[QR Generation] API Response Status:", qrResponse.status);
+        console.log("[QR Generation] API Response Status:", qrResponse.status);
 
         if (!qrResponse.ok) {
           const errorData = await qrResponse.json().catch(() => ({}));
@@ -148,7 +166,7 @@ export function useStudentsData() {
         }
 
         const responseData = await qrResponse.json();
-        // console.log("[QR Generation] API Response:", responseData);
+        console.log("[QR Generation] Success!");
 
         if (!responseData.success || !responseData.qrCode) {
           throw new Error(
@@ -157,7 +175,6 @@ export function useStudentsData() {
         }
 
         const qrCode = responseData.qrCode;
-        // console.log("[QR Generation] Generated QR Code:", qrCode);
 
         // Validate QR code format before saving
         if (!qrCode.startsWith("EVSU:STU:")) {
@@ -167,10 +184,7 @@ export function useStudentsData() {
         }
 
         // Create student with generated QR code
-        // console.log(
-        //   "[Student Creation] Creating student with QR code:",
-        //   qrCode
-        // );
+        console.log("[Student Creation] Saving to Firestore...");
         await createStudent({
           ...studentData,
           qr_code: qrCode,
@@ -195,6 +209,21 @@ export function useStudentsData() {
       }
 
       try {
+        // Check for duplicates if email is being changed
+        if (studentData.email) {
+          const duplicateCheck = await checkStudentExists(
+            studentData.student_id || "", // We can't change student_id in edit, so this is safe
+            studentData.email,
+            id // Exclude current student from duplicate check
+          );
+
+          if (duplicateCheck.exists && duplicateCheck.field === "email") {
+            throw new Error(
+              `Email "${studentData.email}" is already registered to another student.`
+            );
+          }
+        }
+
         await updateStudent(id, studentData);
         await fetchData(); // Refresh the list
       } catch (err) {

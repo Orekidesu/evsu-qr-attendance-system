@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Plus } from "lucide-react";
+import { Search, Plus, Upload, Download } from "lucide-react";
 import type { Program } from "@/lib/types/program";
 
 interface StudentsToolbarProps {
@@ -19,6 +19,7 @@ interface StudentsToolbarProps {
   setSelectedProgram: (program: string) => void;
   programs: Program[];
   onAddClick: () => void;
+  onBulkImportClick?: () => void;
   studentsCount: number;
   isLoading?: boolean;
 }
@@ -30,19 +31,63 @@ export function StudentsToolbar({
   setSelectedProgram,
   programs,
   onAddClick,
+  onBulkImportClick,
   studentsCount,
   isLoading = false,
 }: StudentsToolbarProps) {
+  const handleDownloadTemplate = () => {
+    // Create CSV content
+    const csvContent = [
+      // Header row
+      "student_id,first_name,last_name,email",
+      // Example rows
+      "2025-001,Juan,Dela Cruz,juan.delacruz@example.com",
+      "2025-002,Maria,Santos,maria.santos@example.com",
+      "2025-003,Pedro,Reyes,pedro.reyes@example.com",
+    ].join("\n");
+
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", "student_import_template.csv");
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <div className="text-sm text-muted-foreground">
           {studentsCount} student{studentsCount !== 1 ? "s" : ""} found
         </div>
-        <Button onClick={onAddClick} className="gap-2">
-          <Plus className="w-4 h-4" />
-          Add New Student
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleDownloadTemplate}
+            className="gap-2"
+          >
+            <Download className="w-4 h-4" />
+            Template
+          </Button>
+          {onBulkImportClick && (
+            <Button
+              variant="outline"
+              onClick={onBulkImportClick}
+              className="gap-2"
+            >
+              <Upload className="w-4 h-4" />
+              Bulk Import
+            </Button>
+          )}
+          <Button onClick={onAddClick} className="gap-2">
+            <Plus className="w-4 h-4" />
+            Add Student
+          </Button>
+        </div>
       </div>
 
       <div className="flex gap-4">

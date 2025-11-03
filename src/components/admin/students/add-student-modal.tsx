@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,16 +48,66 @@ export function AddStudentModal({
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Reset form when modal closes
+  useEffect(() => {
+    if (!open) {
+      setFormData({
+        student_id: "",
+        first_name: "",
+        last_name: "",
+        email: "",
+        program_id: "",
+      });
+      setErrors({});
+    }
+  }, [open]);
+
+  // Email validation
+  const validateEmail = (email: string): boolean => {
+    if (!email) return true; // Email is optional
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  // Student ID validation (alphanumeric, no spaces)
+  const validateStudentId = (id: string): boolean => {
+    const idRegex = /^[A-Z0-9-]+$/;
+    return idRegex.test(id);
+  };
+
   const handleSubmit = async () => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.student_id.trim())
+    // Student ID validation
+    if (!formData.student_id.trim()) {
       newErrors.student_id = "Student ID is required";
-    if (!formData.first_name.trim())
+    } else if (!validateStudentId(formData.student_id)) {
+      newErrors.student_id =
+        "Student ID can only contain uppercase letters, numbers, and hyphens";
+    }
+
+    // Name validation
+    if (!formData.first_name.trim()) {
       newErrors.first_name = "First name is required";
-    if (!formData.last_name.trim())
+    } else if (formData.first_name.trim().length < 2) {
+      newErrors.first_name = "First name must be at least 2 characters";
+    }
+
+    if (!formData.last_name.trim()) {
       newErrors.last_name = "Last name is required";
-    if (!formData.program_id) newErrors.program_id = "Program is required";
+    } else if (formData.last_name.trim().length < 2) {
+      newErrors.last_name = "Last name must be at least 2 characters";
+    }
+
+    // Email validation
+    if (formData.email && !validateEmail(formData.email)) {
+      newErrors.email = "Please enter a valid email address";
+    }
+
+    // Program validation
+    if (!formData.program_id) {
+      newErrors.program_id = "Program is required";
+    }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -65,19 +115,22 @@ export function AddStudentModal({
     }
 
     await onSubmit(formData);
-    setFormData({
-      student_id: "",
-      first_name: "",
-      last_name: "",
-      email: "",
-      program_id: "",
-    });
-    setErrors({});
+  };
+
+  // Handle Enter key submission
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !isSubmitting) {
+      e.preventDefault();
+      handleSubmit();
+    }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+    <Dialog
+      open={open}
+      onOpenChange={(open) => !isSubmitting && onOpenChange(open)}
+    >
+      <DialogContent onKeyDown={handleKeyDown}>
         <DialogHeader>
           <DialogTitle>Add New Student</DialogTitle>
           <DialogDescription>
@@ -93,15 +146,29 @@ export function AddStudentModal({
               id="student-id"
               placeholder="e.g., 2025-001"
               value={formData.student_id}
-              onChange={(e) =>
-                setFormData({ ...formData, student_id: e.target.value })
-              }
+              onChange={(e) => {
+                // Auto-uppercase and remove invalid characters
+                const value = e.target.value
+                  .toUpperCase()
+                  .replace(/[^A-Z0-9-]/g, "");
+                setFormData({ ...formData, student_id: value });
+                // Clear error when user starts typing
+                if (errors.student_id) {
+                  setErrors({ ...errors, student_id: "" });
+                }
+              }}
               className={errors.student_id ? "border-destructive" : ""}
               disabled={isSubmitting}
+              maxLength={20}
             />
             {errors.student_id && (
               <p className="text-sm text-destructive mt-1">
                 {errors.student_id}
+              </p>
+            )}
+            {!errors.student_id && formData.student_id && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Valid student ID format
               </p>
             )}
           </div>
@@ -113,11 +180,15 @@ export function AddStudentModal({
                 id="first-name"
                 placeholder="First name"
                 value={formData.first_name}
-                onChange={(e) =>
-                  setFormData({ ...formData, first_name: e.target.value })
-                }
+                onChange={(e) => {
+                  setFormData({ ...formData, first_name: e.target.value });
+                  if (errors.first_name) {
+                    setErrors({ ...errors, first_name: "" });
+                  }
+                }}
                 className={errors.first_name ? "border-destructive" : ""}
                 disabled={isSubmitting}
+                maxLength={50}
               />
               {errors.first_name && (
                 <p className="text-sm text-destructive mt-1">
@@ -132,11 +203,15 @@ export function AddStudentModal({
                 id="last-name"
                 placeholder="Last name"
                 value={formData.last_name}
-                onChange={(e) =>
-                  setFormData({ ...formData, last_name: e.target.value })
-                }
+                onChange={(e) => {
+                  setFormData({ ...formData, last_name: e.target.value });
+                  if (errors.last_name) {
+                    setErrors({ ...errors, last_name: "" });
+                  }
+                }}
                 className={errors.last_name ? "border-destructive" : ""}
                 disabled={isSubmitting}
+                maxLength={50}
               />
               {errors.last_name && (
                 <p className="text-sm text-destructive mt-1">
@@ -153,20 +228,34 @@ export function AddStudentModal({
               type="email"
               placeholder="student@example.com"
               value={formData.email}
-              onChange={(e) =>
-                setFormData({ ...formData, email: e.target.value })
-              }
+              onChange={(e) => {
+                setFormData({
+                  ...formData,
+                  email: e.target.value.toLowerCase(),
+                });
+                if (errors.email) {
+                  setErrors({ ...errors, email: "" });
+                }
+              }}
+              className={errors.email ? "border-destructive" : ""}
               disabled={isSubmitting}
+              maxLength={100}
             />
+            {errors.email && (
+              <p className="text-sm text-destructive mt-1">{errors.email}</p>
+            )}
           </div>
 
           <div>
             <Label htmlFor="program">Program *</Label>
             <Select
               value={formData.program_id}
-              onValueChange={(value) =>
-                setFormData({ ...formData, program_id: value })
-              }
+              onValueChange={(value) => {
+                setFormData({ ...formData, program_id: value });
+                if (errors.program_id) {
+                  setErrors({ ...errors, program_id: "" });
+                }
+              }}
               disabled={isSubmitting}
             >
               <SelectTrigger

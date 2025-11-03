@@ -91,6 +91,74 @@ export const getStudentByQRCode = async (
   return { id: doc.id, ...doc.data() } as Student;
 };
 
+export const getStudentByEmail = async (
+  email: string
+): Promise<Student | null> => {
+  const q = query(collection(db, "students"), where("email", "==", email));
+  const querySnapshot = await getDocs(q);
+  if (querySnapshot.empty) return null;
+  const doc = querySnapshot.docs[0];
+  return { id: doc.id, ...doc.data() } as Student;
+};
+
+export const checkStudentExists = async (
+  studentId: string,
+  email?: string,
+  excludeDocId?: string
+): Promise<{
+  exists: boolean;
+  field?: "student_id" | "email";
+  existingStudent?: Student;
+}> => {
+  // Check student ID
+  const studentIdQuery = query(
+    collection(db, "students"),
+    where("student_id", "==", studentId)
+  );
+  const studentIdSnapshot = await getDocs(studentIdQuery);
+
+  if (!studentIdSnapshot.empty) {
+    const existingDoc = studentIdSnapshot.docs[0];
+    // If we're editing and it's the same document, don't count as duplicate
+    if (!excludeDocId || existingDoc.id !== excludeDocId) {
+      return {
+        exists: true,
+        field: "student_id",
+        existingStudent: {
+          id: existingDoc.id,
+          ...existingDoc.data(),
+        } as Student,
+      };
+    }
+  }
+
+  // Check email if provided
+  if (email && email.trim() !== "") {
+    const emailQuery = query(
+      collection(db, "students"),
+      where("email", "==", email)
+    );
+    const emailSnapshot = await getDocs(emailQuery);
+
+    if (!emailSnapshot.empty) {
+      const existingDoc = emailSnapshot.docs[0];
+      // If we're editing and it's the same document, don't count as duplicate
+      if (!excludeDocId || existingDoc.id !== excludeDocId) {
+        return {
+          exists: true,
+          field: "email",
+          existingStudent: {
+            id: existingDoc.id,
+            ...existingDoc.data(),
+          } as Student,
+        };
+      }
+    }
+  }
+
+  return { exists: false };
+};
+
 export const updateStudent = async (
   studentId: string,
   data: Partial<CreateStudentInput>
