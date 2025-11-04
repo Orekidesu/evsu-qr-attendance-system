@@ -77,7 +77,7 @@ export default function SubjectDetailsModal({
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="pr-8">
-            <span className="break-words">
+            <span className="wrap-break-word">
               {subject.courseCode}: {subject.title}
             </span>
           </DialogTitle>
@@ -96,23 +96,25 @@ export default function SubjectDetailsModal({
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="min-w-0">
                   <p className="text-sm text-muted-foreground">Course Code</p>
-                  <p className="font-semibold break-words">
+                  <p className="font-semibold wrap-break-word">
                     {subject.courseCode}
                   </p>
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm text-muted-foreground">Title</p>
-                  <p className="font-semibold break-words">{subject.title}</p>
+                  <p className="font-semibold wrap-break-word">
+                    {subject.title}
+                  </p>
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm text-muted-foreground">Program</p>
-                  <p className="font-semibold break-words">
+                  <p className="font-semibold wrap-break-word">
                     {subject.programName || subject.program}
                   </p>
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm text-muted-foreground">Teacher</p>
-                  <p className="font-semibold break-words">
+                  <p className="font-semibold wrap-break-word">
                     {subject.teacherName || subject.teacher}
                   </p>
                 </div>
@@ -130,7 +132,7 @@ export default function SubjectDetailsModal({
                 {subject.schedules.map((schedule) => (
                   <div
                     key={schedule.id}
-                    className="p-3 bg-muted rounded-lg text-sm break-words"
+                    className="p-3 bg-muted rounded-lg text-sm wrap-break-word"
                   >
                     <p className="font-semibold">{schedule.days.join(", ")}</p>
                     <p className="text-muted-foreground">
