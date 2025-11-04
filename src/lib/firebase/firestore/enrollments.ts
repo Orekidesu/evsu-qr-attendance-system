@@ -12,6 +12,13 @@ import {
 import { db } from "../config";
 import type { Enrollment, CreateEnrollmentInput } from "../../types";
 
+export async function getAllEnrollments(): Promise<Enrollment[]> {
+  const querySnapshot = await getDocs(collection(db, "enrollments"));
+  return querySnapshot.docs.map(
+    (document) => ({ id: document.id, ...document.data() }) as Enrollment
+  );
+}
+
 export async function enrollStudent(
   data: CreateEnrollmentInput
 ): Promise<string> {

@@ -408,7 +408,7 @@ export function StudentsPageContent() {
     }
   };
   return (
-    <div className="space-y-6">
+    <div className="flex-1 space-y-8 p-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Students</h1>
         <p className="text-muted-foreground">
