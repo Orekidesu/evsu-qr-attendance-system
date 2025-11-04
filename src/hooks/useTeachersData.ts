@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getUsersByRole,
   updateUser,
@@ -9,6 +9,7 @@ import {
 import { getAllSubjects } from "@/lib/firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { auth } from "@/lib/firebase/config";
+import { queryKeys } from "@/lib/queryKeys";
 import type { User } from "@/lib/types/user";
 import type { Subject } from "@/lib/types/subject";
 
@@ -21,75 +22,72 @@ export interface TeacherWithDetails extends User {
   totalStudents: number;
 }
 
+// Standalone function to fetch teachers with details
+async function fetchTeachersWithDetails(): Promise<{
+  teachers: TeacherWithDetails[];
+  subjects: Subject[];
+}> {
+  // Fetch teachers and subjects in parallel
+  const [teachersData, subjectsData] = await Promise.all([
+    getUsersByRole("teacher"),
+    getAllSubjects(),
+  ]);
+
+  // Enrich teachers with assigned subjects details and student count
+  const enrichedTeachers: TeacherWithDetails[] = teachersData.map((teacher) => {
+    // Get subjects assigned to this teacher
+    const teacherSubjects = subjectsData.filter(
+      (subject) => subject.teacher_id === teacher.id
+    );
+
+    // Calculate total students (we'll use enrollments later if needed)
+    const totalStudents = 0; // Placeholder - can be calculated from enrollments
+
+    return {
+      ...teacher,
+      assignedSubjectsDetails: teacherSubjects.map((subject) => ({
+        id: subject.id,
+        courseCode: subject.course_code,
+        title: subject.descriptive_title,
+      })),
+      totalStudents,
+    };
+  });
+
+  return {
+    teachers: enrichedTeachers,
+    subjects: subjectsData,
+  };
+}
+
 export function useTeachersData() {
   const { user, loading: authLoading } = useAuth();
-  const [teachers, setTeachers] = useState<TeacherWithDetails[]>([]);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const fetchData = useCallback(async () => {
-    // Don't fetch if user is not authenticated
-    if (!user) {
-      setError("User not authenticated");
-      setIsLoading(false);
-      return;
-    }
+  // Query for fetching teachers with details
+  const {
+    data,
+    isLoading,
+    error: queryError,
+  } = useQuery({
+    queryKey: queryKeys.teachers,
+    queryFn: fetchTeachersWithDetails,
+    enabled: !authLoading && !!user,
+  });
 
-    setIsLoading(true);
-    setError(null);
-    try {
-      // Fetch teachers and subjects in parallel
-      const [teachersData, subjectsData] = await Promise.all([
-        getUsersByRole("teacher"),
-        getAllSubjects(),
-      ]);
+  // Destructure data with fallback
+  const { teachers, subjects } = data || { teachers: [], subjects: [] };
 
-      setSubjects(subjectsData);
+  // Format error message
+  const error = queryError
+    ? queryError instanceof Error
+      ? queryError.message
+      : "Failed to fetch teachers data"
+    : null;
 
-      // Enrich teachers with assigned subjects details and student count
-      const enrichedTeachers: TeacherWithDetails[] = teachersData.map(
-        (teacher) => {
-          // Get subjects assigned to this teacher
-          const teacherSubjects = subjectsData.filter(
-            (subject) => subject.teacher_id === teacher.id
-          );
-
-          // Calculate total students (we'll use enrollments later if needed)
-          const totalStudents = 0; // Placeholder - can be calculated from enrollments
-
-          return {
-            ...teacher,
-            assignedSubjectsDetails: teacherSubjects.map((subject) => ({
-              id: subject.id,
-              courseCode: subject.course_code,
-              title: subject.descriptive_title,
-            })),
-            totalStudents,
-          };
-        }
-      );
-
-      setTeachers(enrichedTeachers);
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to fetch teachers data";
-      setError(errorMessage);
-      console.error("Error fetching teachers:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    // Only fetch data when auth is done loading
-    if (!authLoading) {
-      fetchData();
-    }
-  }, [authLoading, fetchData]);
-
-  const addTeacher = useCallback(
-    async (data: {
+  // Mutation for adding a teacher
+  const addTeacherMutation = useMutation({
+    mutationFn: async (data: {
       firstName: string;
       lastName: string;
       email: string;
@@ -97,96 +95,118 @@ export function useTeachersData() {
     }) => {
       if (!user) throw new Error("User not authenticated");
 
-      try {
-        // Get the current user's ID token
-        const currentUser = auth.currentUser;
-        if (!currentUser) {
-          throw new Error("No authenticated user found");
-        }
-
-        const idToken = await currentUser.getIdToken();
-
-        // Call the API route to create the teacher (server-side)
-        const response = await fetch("/api/admin/users", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${idToken}`,
-          },
-          body: JSON.stringify({
-            email: data.email,
-            password: data.password,
-            first_name: data.firstName,
-            last_name: data.lastName,
-            role: "teacher",
-          }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || "Failed to create teacher");
-        }
-
-        // Refresh the teachers list
-        await fetchData();
-      } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : "Failed to create teacher";
-        throw new Error(errorMessage);
+      // Get the current user's ID token
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error("No authenticated user found");
       }
-    },
-    [user, fetchData]
-  );
 
-  const editTeacher = useCallback(
-    async (
-      teacherId: string,
+      const idToken = await currentUser.getIdToken();
+
+      // Call the API route to create the teacher (server-side)
+      const response = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          email: data.email,
+          password: data.password,
+          first_name: data.firstName,
+          last_name: data.lastName,
+          role: "teacher",
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to create teacher");
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      // Invalidate teachers query to refetch
+      queryClient.invalidateQueries({ queryKey: queryKeys.teachers });
+    },
+  });
+
+  // Mutation for editing a teacher
+  const editTeacherMutation = useMutation({
+    mutationFn: async ({
+      teacherId,
+      data,
+    }: {
+      teacherId: string;
       data: {
         first_name: string;
         last_name: string;
         assigned_subjects?: string[];
-      }
-    ) => {
+      };
+    }) => {
       if (!user) throw new Error("User not authenticated");
-
-      try {
-        await updateUser(teacherId, data);
-        await fetchData();
-      } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : "Failed to update teacher";
-        throw new Error(errorMessage);
-      }
+      await updateUser(teacherId, data);
     },
-    [user, fetchData]
-  );
+    onSuccess: () => {
+      // Invalidate teachers query to refetch
+      queryClient.invalidateQueries({ queryKey: queryKeys.teachers });
+    },
+  });
 
-  const removeTeacher = useCallback(
-    async (teacherId: string) => {
+  // Mutation for deleting a teacher
+  const deleteTeacherMutation = useMutation({
+    mutationFn: async (teacherId: string) => {
       if (!user) throw new Error("User not authenticated");
 
-      try {
-        // Check if teacher has assigned subjects
-        const teacherSubjects = subjects.filter(
-          (subject) => subject.teacher_id === teacherId
+      // Check if teacher has assigned subjects (using current subjects from cache)
+      const teacherSubjects = subjects.filter(
+        (subject) => subject.teacher_id === teacherId
+      );
+
+      if (teacherSubjects.length > 0) {
+        throw new Error(
+          `Cannot delete teacher. They are assigned to ${teacherSubjects.length} subject(s). Please reassign these subjects first.`
         );
-
-        if (teacherSubjects.length > 0) {
-          throw new Error(
-            `Cannot delete teacher. They are assigned to ${teacherSubjects.length} subject(s). Please reassign these subjects first.`
-          );
-        }
-
-        await deleteUser(teacherId);
-        await fetchData();
-      } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : "Failed to delete teacher";
-        throw new Error(errorMessage);
       }
+
+      await deleteUser(teacherId);
     },
-    [user, subjects, fetchData]
-  );
+    onSuccess: () => {
+      // Invalidate teachers and subjects queries to refetch
+      queryClient.invalidateQueries({ queryKey: queryKeys.teachers });
+      queryClient.invalidateQueries({ queryKey: queryKeys.subjects });
+    },
+  });
+
+  // Wrapper functions to maintain API compatibility
+  const addTeacher = async (data: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    password: string;
+  }) => {
+    return addTeacherMutation.mutateAsync(data);
+  };
+
+  const editTeacher = async (
+    teacherId: string,
+    data: {
+      first_name: string;
+      last_name: string;
+      assigned_subjects?: string[];
+    }
+  ) => {
+    return editTeacherMutation.mutateAsync({ teacherId, data });
+  };
+
+  const removeTeacher = async (teacherId: string) => {
+    return deleteTeacherMutation.mutateAsync(teacherId);
+  };
+
+  const refetch = () => {
+    return queryClient.invalidateQueries({ queryKey: queryKeys.teachers });
+  };
 
   return {
     teachers,
@@ -196,6 +216,6 @@ export function useTeachersData() {
     addTeacher,
     editTeacher,
     removeTeacher,
-    refetch: fetchData,
+    refetch,
   };
 }
