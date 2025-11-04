@@ -15,6 +15,11 @@ import type { Student } from "@/lib/types/student";
 import type { Subject } from "@/lib/types/subject";
 import type { Program } from "@/lib/types/program";
 import { toast } from "sonner";
+import {
+  validateEnrollment,
+  validateBulkEnrollment,
+  getValidationSummary,
+} from "@/lib/utils/enrollmentValidation";
 
 export interface EnrollmentWithDetails extends Enrollment {
   studentName: string;
@@ -110,16 +115,32 @@ export function useEnrollmentsData() {
     }
   }, [authLoading, fetchData]);
 
-  const enrollStudent = async (data: CreateEnrollmentInput) => {
+  const enrollStudent = async (
+    data: CreateEnrollmentInput,
+    options?: { skipValidation?: boolean; maxUnitsPerStudent?: number }
+  ) => {
     try {
-      // Check if already enrolled
-      const alreadyEnrolled = enrollments.some(
-        (e) =>
-          e.student_id === data.student_id && e.subject_id === data.subject_id
-      );
+      const student = students.find((s) => s.id === data.student_id);
+      const subject = subjects.find((s) => s.id === data.subject_id);
 
-      if (alreadyEnrolled) {
-        throw new Error("Student is already enrolled in this subject");
+      if (!student || !subject) {
+        throw new Error("Student or subject not found");
+      }
+
+      // Perform comprehensive validation unless explicitly skipped
+      if (!options?.skipValidation) {
+        const validation = validateEnrollment(
+          student,
+          subject,
+          enrollments,
+          subjects,
+          { maxUnitsPerStudent: options?.maxUnitsPerStudent }
+        );
+
+        if (!validation.isValid) {
+          const primaryError = validation.errors[0];
+          throw new Error(primaryError.details || primaryError.message);
+        }
       }
 
       await createEnrollment(data);
@@ -134,33 +155,128 @@ export function useEnrollmentsData() {
   };
 
   const enrollMultipleStudents = async (
-    enrollmentInputs: CreateEnrollmentInput[]
+    enrollmentInputs: CreateEnrollmentInput[],
+    options?: {
+      validateBeforeEnroll?: boolean;
+      maxUnitsPerStudent?: number;
+      showDetailedErrors?: boolean;
+    }
   ) => {
     try {
       if (enrollmentInputs.length === 0) {
         toast.error("No Students Selected", {
           description: "Please select at least one student to enroll.",
         });
-        return { successCount: 0, errorCount: 0, errors: [] };
+        return {
+          successCount: 0,
+          errorCount: 0,
+          errors: [],
+          skippedCount: 0,
+          validationErrors: [],
+        };
+      }
+
+      const { validateBeforeEnroll = true, showDetailedErrors = true } =
+        options || {};
+
+      // Get the subject being enrolled in (assumes all inputs are for same subject)
+      const subjectId = enrollmentInputs[0]?.subject_id;
+      const subject = subjects.find((s) => s.id === subjectId);
+
+      if (!subject) {
+        throw new Error("Subject not found");
       }
 
       let successCount = 0;
       let skippedCount = 0;
       let errorCount = 0;
       const errors: string[] = [];
+      const validationErrors: Array<{
+        studentId: string;
+        studentName: string;
+        errors: string[];
+      }> = [];
 
+      // Pre-validate if enabled
+      if (validateBeforeEnroll) {
+        const studentsToValidate = enrollmentInputs
+          .map((input) => students.find((s) => s.id === input.student_id))
+          .filter((s): s is Student => s !== undefined);
+
+        const validationResults = validateBulkEnrollment(
+          studentsToValidate,
+          subject,
+          enrollments,
+          subjects,
+          { maxUnitsPerStudent: options?.maxUnitsPerStudent }
+        );
+
+        const summary = getValidationSummary(validationResults);
+
+        // Collect validation errors for detailed reporting
+        validationResults.forEach((result, studentId) => {
+          if (!result.isValid) {
+            const student = students.find((s) => s.id === studentId);
+            if (student) {
+              validationErrors.push({
+                studentId,
+                studentName: `${student.first_name} ${student.last_name}`,
+                errors: result.errors.map((e) => e.details || e.message),
+              });
+            }
+          }
+        });
+
+        // If there are validation errors and detailed errors are enabled, show them
+        if (summary.invalidCount > 0 && showDetailedErrors) {
+          const errorTypes = Object.entries(summary.errorsByType)
+            .map(([type, count]) => `${type}: ${count}`)
+            .join(", ");
+
+          toast.warning("Validation Issues Detected", {
+            description: `${summary.invalidCount} of ${summary.totalStudents} student(s) cannot be enrolled. Issues: ${errorTypes}`,
+          });
+        }
+      }
+
+      // Proceed with enrollment
       for (const enrollmentInput of enrollmentInputs) {
         try {
-          // Check if already enrolled (compare against existing enrollments state)
-          const alreadyEnrolled = enrollments.some(
-            (e) =>
-              e.student_id === enrollmentInput.student_id &&
-              e.subject_id === enrollmentInput.subject_id
+          const student = students.find(
+            (s) => s.id === enrollmentInput.student_id
           );
+          if (!student) {
+            errorCount++;
+            errors.push("Student not found");
+            continue;
+          }
 
-          if (alreadyEnrolled) {
-            skippedCount++;
-            continue; // Skip already enrolled students
+          // Validate individual enrollment
+          if (validateBeforeEnroll) {
+            const validation = validateEnrollment(
+              student,
+              subject,
+              enrollments,
+              subjects,
+              { maxUnitsPerStudent: options?.maxUnitsPerStudent }
+            );
+
+            if (!validation.isValid) {
+              skippedCount++;
+              continue; // Skip invalid enrollments
+            }
+          } else {
+            // At minimum, check for duplicates
+            const alreadyEnrolled = enrollments.some(
+              (e) =>
+                e.student_id === enrollmentInput.student_id &&
+                e.subject_id === enrollmentInput.subject_id
+            );
+
+            if (alreadyEnrolled) {
+              skippedCount++;
+              continue;
+            }
           }
 
           await createEnrollment(enrollmentInput);
@@ -182,7 +298,7 @@ export function useEnrollmentsData() {
       // Provide detailed feedback
       if (successCount === 0 && errorCount === 0 && skippedCount > 0) {
         toast.info("No New Enrollments", {
-          description: `All ${skippedCount} selected student(s) are already enrolled in this subject.`,
+          description: `All ${skippedCount} selected student(s) could not be enrolled due to validation rules.`,
         });
       } else if (errorCount > 0) {
         toast.warning("Bulk Enrollment Completed with Issues", {
@@ -190,7 +306,7 @@ export function useEnrollmentsData() {
         });
       } else if (skippedCount > 0) {
         toast.success("Bulk Enrollment Completed", {
-          description: `Enrolled: ${successCount} student(s). ${skippedCount} already enrolled.`,
+          description: `Enrolled: ${successCount} student(s). ${skippedCount} skipped due to validation rules.`,
         });
       } else {
         toast.success("Bulk Enrollment Successful", {
@@ -198,7 +314,13 @@ export function useEnrollmentsData() {
         });
       }
 
-      return { successCount, errorCount, errors, skippedCount };
+      return {
+        successCount,
+        errorCount,
+        errors,
+        skippedCount,
+        validationErrors,
+      };
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to enroll students";

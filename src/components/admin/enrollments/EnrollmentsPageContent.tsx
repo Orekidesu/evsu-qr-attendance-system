@@ -29,6 +29,11 @@ import {
   type EnrollmentWithDetails,
 } from "@/hooks/useEnrollmentsData";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ValidationErrorsDialog } from "./ValidationErrorsDialog";
+import {
+  validateBulkEnrollment,
+  getValidationSummary,
+} from "@/lib/utils/enrollmentValidation";
 
 export function EnrollmentsPageContent() {
   const {
@@ -60,6 +65,15 @@ export function EnrollmentsPageContent() {
   }>({});
   const [selectedSubjectForBulk, setSelectedSubjectForBulk] = useState("all");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isValidationDialogOpen, setIsValidationDialogOpen] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<
+    Array<{ studentId: string; studentName: string; errors: string[] }>
+  >([]);
+  const [validationSummary, setValidationSummary] = useState<{
+    totalStudents: number;
+    validCount: number;
+    invalidCount: number;
+  }>({ totalStudents: 0, validCount: 0, invalidCount: 0 });
 
   // Apply filters
   const filteredEnrollments = useMemo(() => {
@@ -233,6 +247,113 @@ export function EnrollmentsPageContent() {
 
   const handleDeselectAllStudents = () => {
     setEnrollBySubjectData({});
+  };
+
+  const handleValidateBeforeEnroll = () => {
+    if (selectedSubjectForBulk === "all") {
+      toast.error("No Subject Selected", {
+        description: "Please select a subject first.",
+      });
+      return;
+    }
+
+    const subject = subjects.find((s) => s.id === selectedSubjectForBulk);
+    if (!subject) {
+      toast.error("Invalid Subject", {
+        description: "The selected subject could not be found.",
+      });
+      return;
+    }
+
+    const studentsToValidate = studentsInSelectedProgram.filter(
+      (student) => enrollBySubjectData[student.id]
+    );
+
+    if (studentsToValidate.length === 0) {
+      toast.error("No Students Selected", {
+        description: "Please select at least one student to validate.",
+      });
+      return;
+    }
+
+    // Run validation
+    const validationResults = validateBulkEnrollment(
+      studentsToValidate,
+      subject,
+      enrollments,
+      subjects,
+      { maxUnitsPerStudent: 30 } // Configurable limit
+    );
+
+    const summary = getValidationSummary(validationResults);
+
+    // Collect validation errors
+    const errors: Array<{
+      studentId: string;
+      studentName: string;
+      errors: string[];
+    }> = [];
+    validationResults.forEach((result, studentId) => {
+      if (!result.isValid) {
+        const student = students.find((s) => s.id === studentId);
+        if (student) {
+          errors.push({
+            studentId,
+            studentName: `${student.first_name} ${student.last_name}`,
+            errors: result.errors.map((e) => e.details || e.message),
+          });
+        }
+      }
+    });
+
+    setValidationErrors(errors);
+    setValidationSummary({
+      totalStudents: summary.totalStudents,
+      validCount: summary.validCount,
+      invalidCount: summary.invalidCount,
+    });
+    setIsValidationDialogOpen(true);
+  };
+
+  const handleProceedAfterValidation = async () => {
+    setIsValidationDialogOpen(false);
+
+    // Only enroll valid students
+    const subject = subjects.find((s) => s.id === selectedSubjectForBulk);
+    if (!subject) return;
+
+    const validStudentIds = new Set(
+      studentsInSelectedProgram
+        .filter((student) => enrollBySubjectData[student.id])
+        .filter((student) => {
+          const validation = validateBulkEnrollment(
+            [student],
+            subject,
+            enrollments,
+            subjects,
+            { maxUnitsPerStudent: 30 }
+          );
+          const result = validation.get(student.id);
+          return result?.isValid;
+        })
+        .map((s) => s.id)
+    );
+
+    setIsSubmitting(true);
+    try {
+      const enrollmentInputs = Array.from(validStudentIds).map((studentId) => ({
+        student_id: studentId,
+        subject_id: selectedSubjectForBulk,
+        program_id: subject.program_id,
+      }));
+
+      await enrollMultipleStudents(enrollmentInputs, {
+        validateBeforeEnroll: false, // Already validated
+      });
+      setEnrollBySubjectData({});
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const formatDate = (timestamp: unknown) => {
@@ -661,25 +782,41 @@ export function EnrollmentsPageContent() {
                                 student(s) selected
                               </p>
                             )}
-                            <Button
-                              onClick={handleBulkEnroll}
-                              disabled={
-                                isSubmitting ||
-                                !Object.values(enrollBySubjectData).some(
-                                  (v) => v
-                                )
-                              }
-                              className="w-full"
-                            >
-                              {isSubmitting ? (
-                                <>
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                  Enrolling...
-                                </>
-                              ) : (
-                                <>Enroll Selected Students</>
-                              )}
-                            </Button>
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={handleValidateBeforeEnroll}
+                                disabled={
+                                  isSubmitting ||
+                                  !Object.values(enrollBySubjectData).some(
+                                    (v) => v
+                                  )
+                                }
+                                variant="outline"
+                                className="flex-1"
+                              >
+                                <AlertCircle className="mr-2 h-4 w-4" />
+                                Validate Selection
+                              </Button>
+                              <Button
+                                onClick={handleBulkEnroll}
+                                disabled={
+                                  isSubmitting ||
+                                  !Object.values(enrollBySubjectData).some(
+                                    (v) => v
+                                  )
+                                }
+                                className="flex-1"
+                              >
+                                {isSubmitting ? (
+                                  <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Enrolling...
+                                  </>
+                                ) : (
+                                  <>Enroll Selected Students</>
+                                )}
+                              </Button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -853,6 +990,17 @@ export function EnrollmentsPageContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Validation Errors Dialog */}
+      <ValidationErrorsDialog
+        open={isValidationDialogOpen}
+        onOpenChange={setIsValidationDialogOpen}
+        validationErrors={validationErrors}
+        totalStudents={validationSummary.totalStudents}
+        validStudents={validationSummary.validCount}
+        onProceed={handleProceedAfterValidation}
+        showProceedButton={validationSummary.validCount > 0}
+      />
     </div>
   );
 }
