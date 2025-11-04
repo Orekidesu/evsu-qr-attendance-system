@@ -1,6 +1,13 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Plus, UserPlus, BookPlus, LogIn } from "lucide-react"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Plus, UserPlus, BookPlus, LogIn } from "lucide-react";
+import Link from "next/link";
 
 export function QuickActions() {
   const actions = [
@@ -8,27 +15,27 @@ export function QuickActions() {
       title: "Add New Student",
       description: "Create a new student account",
       icon: UserPlus,
-      href: "#",
+      href: "/admin/students",
     },
     {
       title: "Create Subject",
       description: "Add a new subject to the system",
       icon: BookPlus,
-      href: "#",
+      href: "/admin/subjects",
     },
     {
       title: "Add Program",
       description: "Create a new academic program",
       icon: Plus,
-      href: "#",
+      href: "/admin/programs",
     },
     {
       title: "Enroll Student",
-      description: "Enroll a student in a program",
+      description: "Enroll a student in a subject",
       icon: LogIn,
-      href: "#",
+      href: "/admin/enrollments",
     },
-  ]
+  ];
 
   return (
     <Card>
@@ -39,21 +46,26 @@ export function QuickActions() {
       <CardContent>
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
           {actions.map((action) => {
-            const Icon = action.icon
+            const Icon = action.icon;
             return (
-              <a key={action.title} href={action.href}>
-                <Button variant="outline" className="w-full h-auto flex flex-col items-start p-4 gap-2 bg-transparent">
+              <Link key={action.title} href={action.href}>
+                <Button
+                  variant="outline"
+                  className="w-full h-auto flex flex-col items-start p-4 gap-2 bg-transparent hover:bg-accent"
+                >
                   <Icon className="h-5 w-5" />
                   <div className="text-left">
                     <div className="font-semibold text-sm">{action.title}</div>
-                    <div className="text-xs text-muted-foreground">{action.description}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {action.description}
+                    </div>
                   </div>
                 </Button>
-              </a>
-            )
+              </Link>
+            );
           })}
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }
