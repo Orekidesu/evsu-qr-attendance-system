@@ -5,7 +5,6 @@ import {
   Command,
   Settings,
   Users,
-  QrCode,
   ClipboardCheck,
   LayoutDashboard,
 } from "lucide-react";
@@ -31,11 +30,7 @@ const navMain = [
     icon: LayoutDashboard,
     isActive: true,
   },
-  {
-    title: "Scanner",
-    url: "/teacher/scanner",
-    icon: QrCode,
-  },
+
   {
     title: "Attendance",
     url: "/teacher/attendance",
