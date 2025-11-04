@@ -501,13 +501,13 @@ export function EnrollmentsPageContent() {
                 ) : (
                   <>
                     {/* Subject Selection */}
-                    <div className="space-y-2">
+                    <div className="space-y-2 ">
                       <Label htmlFor="bulk-subject">Select Subject</Label>
                       <Select
                         value={selectedSubjectForBulk}
                         onValueChange={setSelectedSubjectForBulk}
                       >
-                        <SelectTrigger id="bulk-subject">
+                        <SelectTrigger id="bulk-subject" className="w-1/2">
                           <SelectValue placeholder="Choose a subject..." />
                         </SelectTrigger>
                         <SelectContent>
