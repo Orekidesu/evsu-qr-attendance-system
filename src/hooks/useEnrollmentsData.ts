@@ -134,45 +134,71 @@ export function useEnrollmentsData() {
   };
 
   const enrollMultipleStudents = async (
-    enrollments: CreateEnrollmentInput[]
+    enrollmentInputs: CreateEnrollmentInput[]
   ) => {
     try {
+      if (enrollmentInputs.length === 0) {
+        toast.error("No Students Selected", {
+          description: "Please select at least one student to enroll.",
+        });
+        return { successCount: 0, errorCount: 0, errors: [] };
+      }
+
       let successCount = 0;
+      let skippedCount = 0;
       let errorCount = 0;
       const errors: string[] = [];
 
-      for (const enrollment of enrollments) {
+      for (const enrollmentInput of enrollmentInputs) {
         try {
-          // Check if already enrolled
+          // Check if already enrolled (compare against existing enrollments state)
           const alreadyEnrolled = enrollments.some(
             (e) =>
-              e.student_id === enrollment.student_id &&
-              e.subject_id === enrollment.subject_id
+              e.student_id === enrollmentInput.student_id &&
+              e.subject_id === enrollmentInput.subject_id
           );
 
-          if (!alreadyEnrolled) {
-            await createEnrollment(enrollment);
-            successCount++;
+          if (alreadyEnrolled) {
+            skippedCount++;
+            continue; // Skip already enrolled students
           }
+
+          await createEnrollment(enrollmentInput);
+          successCount++;
         } catch (err) {
           errorCount++;
-          errors.push(err instanceof Error ? err.message : "Unknown error");
+          const errorMsg = err instanceof Error ? err.message : "Unknown error";
+          errors.push(errorMsg);
+          console.error(
+            "Bulk enrollment error for student:",
+            enrollmentInput.student_id,
+            errorMsg
+          );
         }
       }
 
       await fetchData(); // Refresh data
 
-      if (errorCount > 0) {
-        toast.warning("Bulk Enrollment Completed with Errors", {
-          description: `Enrolled: ${successCount}, Failed: ${errorCount}`,
+      // Provide detailed feedback
+      if (successCount === 0 && errorCount === 0 && skippedCount > 0) {
+        toast.info("No New Enrollments", {
+          description: `All ${skippedCount} selected student(s) are already enrolled in this subject.`,
+        });
+      } else if (errorCount > 0) {
+        toast.warning("Bulk Enrollment Completed with Issues", {
+          description: `Enrolled: ${successCount}, Skipped: ${skippedCount}, Failed: ${errorCount}`,
+        });
+      } else if (skippedCount > 0) {
+        toast.success("Bulk Enrollment Completed", {
+          description: `Enrolled: ${successCount} student(s). ${skippedCount} already enrolled.`,
         });
       } else {
         toast.success("Bulk Enrollment Successful", {
-          description: `Successfully enrolled ${successCount} student(s)`,
+          description: `Successfully enrolled ${successCount} student(s).`,
         });
       }
 
-      return { successCount, errorCount, errors };
+      return { successCount, errorCount, errors, skippedCount };
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to enroll students";

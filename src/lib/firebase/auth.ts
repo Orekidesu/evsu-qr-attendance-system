@@ -50,11 +50,6 @@ export async function createUser(
     };
 
     // Add optional fields based on role
-    if (userData.role === "student" && userData.program_id) {
-      userDoc.program_id = userData.program_id;
-      userDoc.qr_code = userData.qr_code;
-    }
-
     if (userData.role === "teacher" && userData.assigned_subjects) {
       userDoc.assigned_subjects = userData.assigned_subjects;
     }

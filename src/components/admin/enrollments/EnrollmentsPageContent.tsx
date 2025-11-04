@@ -23,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Search, Plus, Trash2, Loader2, AlertCircle } from "lucide-react";
+import { toast } from "sonner";
 import {
   useEnrollmentsData,
   type EnrollmentWithDetails,
@@ -120,10 +121,31 @@ export function EnrollmentsPageContent() {
   };
 
   const handleSaveEnrollment = async () => {
-    if (!enrollFormData.studentId || !enrollFormData.subjectId) return;
+    if (!enrollFormData.studentId || !enrollFormData.subjectId) {
+      toast.error("Missing Information", {
+        description: "Please select both a student and a subject.",
+      });
+      return;
+    }
 
     const student = students.find((s) => s.id === enrollFormData.studentId);
-    if (!student) return;
+    const subject = subjects.find((s) => s.id === enrollFormData.subjectId);
+
+    if (!student || !subject) {
+      toast.error("Invalid Selection", {
+        description: "The selected student or subject could not be found.",
+      });
+      return;
+    }
+
+    // Extra validation: ensure subject belongs to student's program
+    if (student.program_id !== subject.program_id) {
+      toast.error("Program Mismatch", {
+        description:
+          "The selected subject does not belong to the student's program.",
+      });
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -153,16 +175,29 @@ export function EnrollmentsPageContent() {
   };
 
   const handleBulkEnroll = async () => {
-    if (selectedSubjectForBulk === "all") return;
+    if (selectedSubjectForBulk === "all") {
+      toast.error("No Subject Selected", {
+        description: "Please select a subject first.",
+      });
+      return;
+    }
 
     const subject = subjects.find((s) => s.id === selectedSubjectForBulk);
-    if (!subject) return;
+    if (!subject) {
+      toast.error("Invalid Subject", {
+        description: "The selected subject could not be found.",
+      });
+      return;
+    }
 
     const studentsToEnroll = studentsInSelectedProgram.filter(
       (student) => enrollBySubjectData[student.id]
     );
 
     if (studentsToEnroll.length === 0) {
+      toast.error("No Students Selected", {
+        description: "Please select at least one student to enroll.",
+      });
       return;
     }
 
@@ -176,10 +211,28 @@ export function EnrollmentsPageContent() {
 
       await enrollMultipleStudents(enrollmentInputs);
       setEnrollBySubjectData({});
-      setSelectedSubjectForBulk("all");
+      // Don't reset subject selection to allow for multiple batch operations
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSelectAllStudents = () => {
+    const newState: { [key: string]: boolean } = {};
+    studentsInSelectedProgram.forEach((student) => {
+      const isAlreadyEnrolled = enrollments.some(
+        (e) =>
+          e.student_id === student.id && e.subject_id === selectedSubjectForBulk
+      );
+      if (!isAlreadyEnrolled) {
+        newState[student.id] = true;
+      }
+    });
+    setEnrollBySubjectData(newState);
+  };
+
+  const handleDeselectAllStudents = () => {
+    setEnrollBySubjectData({});
   };
 
   const formatDate = (timestamp: unknown) => {
@@ -478,16 +531,68 @@ export function EnrollmentsPageContent() {
                     {selectedSubjectForBulk !== "all" && (
                       <div className="space-y-4">
                         <div>
-                          <p className="text-sm font-medium mb-3">
-                            Students in{" "}
-                            {programs.find(
-                              (p) =>
-                                p.id ===
-                                subjects.find(
-                                  (s) => s.id === selectedSubjectForBulk
-                                )?.program_id
-                            )?.abbreviation || "Unknown Program"}
-                          </p>
+                          <div className="flex items-center justify-between mb-3">
+                            <p className="text-sm font-medium">
+                              Students in{" "}
+                              {programs.find(
+                                (p) =>
+                                  p.id ===
+                                  subjects.find(
+                                    (s) => s.id === selectedSubjectForBulk
+                                  )?.program_id
+                              )?.abbreviation || "Unknown Program"}
+                              {studentsInSelectedProgram.length > 0 && (
+                                <span className="text-muted-foreground ml-2">
+                                  (
+                                  {
+                                    studentsInSelectedProgram.filter(
+                                      (s) =>
+                                        !enrollments.some(
+                                          (e) =>
+                                            e.student_id === s.id &&
+                                            e.subject_id ===
+                                              selectedSubjectForBulk
+                                        )
+                                    ).length
+                                  }{" "}
+                                  available)
+                                </span>
+                              )}
+                            </p>
+                            {studentsInSelectedProgram.length > 0 && (
+                              <div className="flex gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={handleSelectAllStudents}
+                                  disabled={studentsInSelectedProgram.every(
+                                    (s) =>
+                                      enrollments.some(
+                                        (e) =>
+                                          e.student_id === s.id &&
+                                          e.subject_id ===
+                                            selectedSubjectForBulk
+                                      )
+                                  )}
+                                >
+                                  Select All
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={handleDeselectAllStudents}
+                                  disabled={
+                                    Object.keys(enrollBySubjectData).length ===
+                                    0
+                                  }
+                                >
+                                  Deselect All
+                                </Button>
+                              </div>
+                            )}
+                          </div>
                           {studentsInSelectedProgram.length === 0 ? (
                             <div className="text-center py-8 border rounded-lg">
                               <p className="text-muted-foreground">
@@ -544,23 +649,38 @@ export function EnrollmentsPageContent() {
                         </div>
 
                         {studentsInSelectedProgram.length > 0 && (
-                          <Button
-                            onClick={handleBulkEnroll}
-                            disabled={
-                              isSubmitting ||
-                              !Object.values(enrollBySubjectData).some((v) => v)
-                            }
-                            className="w-full"
-                          >
-                            {isSubmitting ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Enrolling...
-                              </>
-                            ) : (
-                              <>Enroll Selected Students</>
+                          <div className="space-y-2">
+                            {Object.values(enrollBySubjectData).filter((v) => v)
+                              .length > 0 && (
+                              <p className="text-sm text-muted-foreground text-center">
+                                {
+                                  Object.values(enrollBySubjectData).filter(
+                                    (v) => v
+                                  ).length
+                                }{" "}
+                                student(s) selected
+                              </p>
                             )}
-                          </Button>
+                            <Button
+                              onClick={handleBulkEnroll}
+                              disabled={
+                                isSubmitting ||
+                                !Object.values(enrollBySubjectData).some(
+                                  (v) => v
+                                )
+                              }
+                              className="w-full"
+                            >
+                              {isSubmitting ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Enrolling...
+                                </>
+                              ) : (
+                                <>Enroll Selected Students</>
+                              )}
+                            </Button>
+                          </div>
                         )}
                       </div>
                     )}
