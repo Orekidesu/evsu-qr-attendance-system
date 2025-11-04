@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getAllEnrollments,
   enrollStudent as createEnrollment,
@@ -10,6 +10,7 @@ import { getAllStudents } from "@/lib/firebase/firestore/students";
 import { getAllSubjects } from "@/lib/firebase/firestore/subjects";
 import { getAllPrograms } from "@/lib/firebase/firestore/programs";
 import { useAuth } from "@/contexts/AuthContext";
+import { queryKeys } from "@/lib/queryKeys";
 import type { Enrollment, CreateEnrollmentInput } from "@/lib/types/enrollment";
 import type { Student } from "@/lib/types/student";
 import type { Subject } from "@/lib/types/subject";
@@ -29,97 +30,97 @@ export interface EnrollmentWithDetails extends Enrollment {
   programName: string;
 }
 
+// Standalone function to fetch enrollments with details
+async function fetchEnrollmentsWithDetails(): Promise<{
+  enrollments: EnrollmentWithDetails[];
+  students: Student[];
+  subjects: Subject[];
+  programs: Program[];
+}> {
+  // Fetch all data in parallel
+  const [enrollmentsData, studentsData, subjectsData, programsData] =
+    await Promise.all([
+      getAllEnrollments(),
+      getAllStudents(),
+      getAllSubjects(),
+      getAllPrograms(),
+    ]);
+
+  // Enrich enrollments with related data
+  const enrichedEnrollments: EnrollmentWithDetails[] = enrollmentsData
+    .map((enrollment) => {
+      const student = studentsData.find((s) => s.id === enrollment.student_id);
+      const subject = subjectsData.find((s) => s.id === enrollment.subject_id);
+      const program = programsData.find((p) => p.id === enrollment.program_id);
+
+      // Skip enrollments with missing references
+      if (!student || !subject || !program) {
+        console.warn(`Enrollment ${enrollment.id} has missing references:`, {
+          student: !!student,
+          subject: !!subject,
+          program: !!program,
+        });
+        return null;
+      }
+
+      return {
+        ...enrollment,
+        studentName: `${student.first_name} ${student.last_name}`,
+        studentNumber: student.student_id,
+        subjectCode: subject.course_code,
+        subjectTitle: subject.descriptive_title,
+        programName: program.abbreviation,
+      };
+    })
+    .filter((e): e is EnrollmentWithDetails => e !== null);
+
+  return {
+    enrollments: enrichedEnrollments,
+    students: studentsData,
+    subjects: subjectsData,
+    programs: programsData,
+  };
+}
+
 export function useEnrollmentsData() {
   const { user, loading: authLoading } = useAuth();
-  const [enrollments, setEnrollments] = useState<EnrollmentWithDetails[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [programs, setPrograms] = useState<Program[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const fetchData = useCallback(async () => {
-    if (!user) {
-      setError("User not authenticated");
-      setIsLoading(false);
-      return;
-    }
+  // Query for fetching enrollments with details
+  const {
+    data,
+    isLoading,
+    error: queryError,
+  } = useQuery({
+    queryKey: queryKeys.enrollments,
+    queryFn: fetchEnrollmentsWithDetails,
+    enabled: !authLoading && !!user,
+  });
 
-    setIsLoading(true);
-    setError(null);
-    try {
-      // Fetch all data in parallel
-      const [enrollmentsData, studentsData, subjectsData, programsData] =
-        await Promise.all([
-          getAllEnrollments(),
-          getAllStudents(),
-          getAllSubjects(),
-          getAllPrograms(),
-        ]);
+  // Destructure data with fallback
+  const { enrollments, students, subjects, programs } = data || {
+    enrollments: [],
+    students: [],
+    subjects: [],
+    programs: [],
+  };
 
-      setStudents(studentsData);
-      setSubjects(subjectsData);
-      setPrograms(programsData);
+  // Format error message
+  const error = queryError
+    ? queryError instanceof Error
+      ? queryError.message
+      : "Failed to fetch enrollments data"
+    : null;
 
-      // Enrich enrollments with related data
-      const enrichedEnrollments: EnrollmentWithDetails[] = enrollmentsData
-        .map((enrollment) => {
-          const student = studentsData.find(
-            (s) => s.id === enrollment.student_id
-          );
-          const subject = subjectsData.find(
-            (s) => s.id === enrollment.subject_id
-          );
-          const program = programsData.find(
-            (p) => p.id === enrollment.program_id
-          );
-
-          // Skip enrollments with missing references
-          if (!student || !subject || !program) {
-            console.warn(
-              `Enrollment ${enrollment.id} has missing references:`,
-              {
-                student: !!student,
-                subject: !!subject,
-                program: !!program,
-              }
-            );
-            return null;
-          }
-
-          return {
-            ...enrollment,
-            studentName: `${student.first_name} ${student.last_name}`,
-            studentNumber: student.student_id,
-            subjectCode: subject.course_code,
-            subjectTitle: subject.descriptive_title,
-            programName: program.abbreviation,
-          };
-        })
-        .filter((e): e is EnrollmentWithDetails => e !== null);
-
-      setEnrollments(enrichedEnrollments);
-    } catch (err) {
-      console.error("Error fetching enrollments data:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to fetch enrollments data"
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (!authLoading) {
-      fetchData();
-    }
-  }, [authLoading, fetchData]);
-
-  const enrollStudent = async (
-    data: CreateEnrollmentInput,
-    options?: { skipValidation?: boolean; maxUnitsPerStudent?: number }
-  ) => {
-    try {
+  // Mutation for enrolling a single student
+  const enrollStudentMutation = useMutation({
+    mutationFn: async ({
+      data,
+      options,
+    }: {
+      data: CreateEnrollmentInput;
+      options?: { skipValidation?: boolean; maxUnitsPerStudent?: number };
+    }) => {
       const student = students.find((s) => s.id === data.student_id);
       const subject = subjects.find((s) => s.id === data.subject_id);
 
@@ -144,25 +145,34 @@ export function useEnrollmentsData() {
       }
 
       await createEnrollment(data);
-      await fetchData(); // Refresh data
+    },
+    onSuccess: () => {
+      // Invalidate related queries
+      queryClient.invalidateQueries({ queryKey: queryKeys.enrollments });
+      queryClient.invalidateQueries({ queryKey: queryKeys.students });
+      queryClient.invalidateQueries({ queryKey: queryKeys.subjects });
       toast.success("Student enrolled successfully");
-    } catch (err) {
+    },
+    onError: (error) => {
       const errorMessage =
-        err instanceof Error ? err.message : "Failed to enroll student";
+        error instanceof Error ? error.message : "Failed to enroll student";
       toast.error("Enrollment Failed", { description: errorMessage });
-      throw err;
-    }
-  };
+    },
+  });
 
-  const enrollMultipleStudents = async (
-    enrollmentInputs: CreateEnrollmentInput[],
-    options?: {
-      validateBeforeEnroll?: boolean;
-      maxUnitsPerStudent?: number;
-      showDetailedErrors?: boolean;
-    }
-  ) => {
-    try {
+  // Mutation for enrolling multiple students
+  const enrollMultipleStudentsMutation = useMutation({
+    mutationFn: async ({
+      enrollmentInputs,
+      options,
+    }: {
+      enrollmentInputs: CreateEnrollmentInput[];
+      options?: {
+        validateBeforeEnroll?: boolean;
+        maxUnitsPerStudent?: number;
+        showDetailedErrors?: boolean;
+      };
+    }) => {
       if (enrollmentInputs.length === 0) {
         toast.error("No Students Selected", {
           description: "Please select at least one student to enroll.",
@@ -293,27 +303,6 @@ export function useEnrollmentsData() {
         }
       }
 
-      await fetchData(); // Refresh data
-
-      // Provide detailed feedback
-      if (successCount === 0 && errorCount === 0 && skippedCount > 0) {
-        toast.info("No New Enrollments", {
-          description: `All ${skippedCount} selected student(s) could not be enrolled due to validation rules.`,
-        });
-      } else if (errorCount > 0) {
-        toast.warning("Bulk Enrollment Completed with Issues", {
-          description: `Enrolled: ${successCount}, Skipped: ${skippedCount}, Failed: ${errorCount}`,
-        });
-      } else if (skippedCount > 0) {
-        toast.success("Bulk Enrollment Completed", {
-          description: `Enrolled: ${successCount} student(s). ${skippedCount} skipped due to validation rules.`,
-        });
-      } else {
-        toast.success("Bulk Enrollment Successful", {
-          description: `Successfully enrolled ${successCount} student(s).`,
-        });
-      }
-
       return {
         successCount,
         errorCount,
@@ -321,25 +310,90 @@ export function useEnrollmentsData() {
         skippedCount,
         validationErrors,
       };
-    } catch (err) {
+    },
+    onSuccess: (result) => {
+      // Invalidate related queries
+      queryClient.invalidateQueries({ queryKey: queryKeys.enrollments });
+      queryClient.invalidateQueries({ queryKey: queryKeys.students });
+      queryClient.invalidateQueries({ queryKey: queryKeys.subjects });
+
+      // Provide detailed feedback
+      if (
+        result.successCount === 0 &&
+        result.errorCount === 0 &&
+        result.skippedCount > 0
+      ) {
+        toast.info("No New Enrollments", {
+          description: `All ${result.skippedCount} selected student(s) could not be enrolled due to validation rules.`,
+        });
+      } else if (result.errorCount > 0) {
+        toast.warning("Bulk Enrollment Completed with Issues", {
+          description: `Enrolled: ${result.successCount}, Skipped: ${result.skippedCount}, Failed: ${result.errorCount}`,
+        });
+      } else if (result.skippedCount > 0) {
+        toast.success("Bulk Enrollment Completed", {
+          description: `Enrolled: ${result.successCount} student(s). ${result.skippedCount} skipped due to validation rules.`,
+        });
+      } else {
+        toast.success("Bulk Enrollment Successful", {
+          description: `Successfully enrolled ${result.successCount} student(s).`,
+        });
+      }
+    },
+    onError: (error) => {
       const errorMessage =
-        err instanceof Error ? err.message : "Failed to enroll students";
+        error instanceof Error ? error.message : "Failed to enroll students";
       toast.error("Bulk Enrollment Failed", { description: errorMessage });
-      throw err;
+    },
+  });
+
+  // Mutation for removing an enrollment
+  const removeEnrollmentMutation = useMutation({
+    mutationFn: async (enrollmentId: string) => {
+      await deleteEnrollment(enrollmentId);
+    },
+    onSuccess: () => {
+      // Invalidate related queries
+      queryClient.invalidateQueries({ queryKey: queryKeys.enrollments });
+      queryClient.invalidateQueries({ queryKey: queryKeys.students });
+      queryClient.invalidateQueries({ queryKey: queryKeys.subjects });
+      toast.success("Enrollment removed successfully");
+    },
+    onError: (error) => {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to remove enrollment";
+      toast.error("Remove Failed", { description: errorMessage });
+    },
+  });
+
+  // Wrapper functions to maintain API compatibility
+  const enrollStudent = async (
+    data: CreateEnrollmentInput,
+    options?: { skipValidation?: boolean; maxUnitsPerStudent?: number }
+  ) => {
+    return enrollStudentMutation.mutateAsync({ data, options });
+  };
+
+  const enrollMultipleStudents = async (
+    enrollmentInputs: CreateEnrollmentInput[],
+    options?: {
+      validateBeforeEnroll?: boolean;
+      maxUnitsPerStudent?: number;
+      showDetailedErrors?: boolean;
     }
+  ) => {
+    return enrollMultipleStudentsMutation.mutateAsync({
+      enrollmentInputs,
+      options,
+    });
   };
 
   const removeEnrollment = async (enrollmentId: string) => {
-    try {
-      await deleteEnrollment(enrollmentId);
-      await fetchData(); // Refresh data
-      toast.success("Enrollment removed successfully");
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to remove enrollment";
-      toast.error("Remove Failed", { description: errorMessage });
-      throw err;
-    }
+    return removeEnrollmentMutation.mutateAsync(enrollmentId);
+  };
+
+  const refreshData = () => {
+    return queryClient.invalidateQueries({ queryKey: queryKeys.enrollments });
   };
 
   return {
@@ -352,6 +406,6 @@ export function useEnrollmentsData() {
     enrollStudent,
     enrollMultipleStudents,
     removeEnrollment,
-    refreshData: fetchData,
+    refreshData,
   };
 }

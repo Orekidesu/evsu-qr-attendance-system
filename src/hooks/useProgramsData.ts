@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getAllPrograms,
   createProgram,
@@ -10,6 +10,7 @@ import {
 import { getSubjectsByProgram } from "@/lib/firebase/firestore";
 import { getStudentsByProgram } from "@/lib/firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
+import { queryKeys } from "@/lib/queryKeys";
 import type { Program } from "@/lib/types/program";
 
 export interface ProgramWithCounts extends Program {
@@ -17,71 +18,94 @@ export interface ProgramWithCounts extends Program {
   studentsCount: number;
 }
 
+// Fetch function to get all programs with counts
+async function fetchProgramsWithCounts(): Promise<ProgramWithCounts[]> {
+  const programsData = await getAllPrograms();
+
+  // Fetch counts for each program in parallel
+  const programsWithCounts = await Promise.all(
+    programsData.map(async (program) => {
+      try {
+        const [subjects, students] = await Promise.all([
+          getSubjectsByProgram(program.id),
+          getStudentsByProgram(program.id),
+        ]);
+
+        return {
+          ...program,
+          subjectsCount: subjects.length,
+          studentsCount: students.length,
+        };
+      } catch (err) {
+        console.error(`Error fetching counts for program ${program.id}:`, err);
+        // Return program with zero counts if fetching fails
+        return {
+          ...program,
+          subjectsCount: 0,
+          studentsCount: 0,
+        };
+      }
+    })
+  );
+
+  return programsWithCounts;
+}
+
 export function useProgramsData() {
   const { user, loading: authLoading } = useAuth();
-  const [programs, setPrograms] = useState<ProgramWithCounts[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const fetchPrograms = useCallback(async () => {
-    // Don't fetch if user is not authenticated
-    if (!user) {
-      setError("User not authenticated");
-      setIsLoading(false);
-      return;
-    }
+  // Query for fetching programs
+  const {
+    data: programs = [],
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: queryKeys.programs,
+    queryFn: fetchProgramsWithCounts,
+    enabled: !authLoading && !!user, // Only fetch when auth is ready and user exists
+  });
 
-    setIsLoading(true);
-    setError(null);
-    try {
-      const programsData = await getAllPrograms();
+  // Mutation for adding a program
+  const addProgramMutation = useMutation({
+    mutationFn: (data: {
+      name: string;
+      abbreviation: string;
+      academic_year: string;
+    }) => createProgram(data),
+    onSuccess: () => {
+      // Invalidate and refetch programs
+      queryClient.invalidateQueries({ queryKey: queryKeys.programs });
+    },
+  });
 
-      // Fetch counts for each program in parallel
-      const programsWithCounts = await Promise.all(
-        programsData.map(async (program) => {
-          try {
-            const [subjects, students] = await Promise.all([
-              getSubjectsByProgram(program.id),
-              getStudentsByProgram(program.id),
-            ]);
+  // Mutation for editing a program
+  const editProgramMutation = useMutation({
+    mutationFn: ({
+      programId,
+      data,
+    }: {
+      programId: string;
+      data: {
+        name: string;
+        abbreviation: string;
+        academic_year: string;
+      };
+    }) => updateProgram(programId, data),
+    onSuccess: () => {
+      // Invalidate and refetch programs
+      queryClient.invalidateQueries({ queryKey: queryKeys.programs });
+    },
+  });
 
-            return {
-              ...program,
-              subjectsCount: subjects.length,
-              studentsCount: students.length,
-            };
-          } catch (err) {
-            console.error(
-              `Error fetching counts for program ${program.id}:`,
-              err
-            );
-            // Return program with zero counts if fetching fails
-            return {
-              ...program,
-              subjectsCount: 0,
-              studentsCount: 0,
-            };
-          }
-        })
-      );
-
-      setPrograms(programsWithCounts);
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to fetch programs";
-      setError(errorMessage);
-      console.error("Error fetching programs:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    // Wait for auth to finish loading before fetching
-    if (!authLoading) {
-      fetchPrograms();
-    }
-  }, [authLoading, fetchPrograms]);
+  // Mutation for deleting a program
+  const deleteProgramMutation = useMutation({
+    mutationFn: (programId: string) => deleteProgram(programId),
+    onSuccess: () => {
+      // Invalidate and refetch programs
+      queryClient.invalidateQueries({ queryKey: queryKeys.programs });
+    },
+  });
 
   const addProgram = async (data: {
     name: string;
@@ -93,8 +117,7 @@ export function useProgramsData() {
     }
 
     try {
-      await createProgram(data);
-      await fetchPrograms(); // Refresh the list
+      await addProgramMutation.mutateAsync(data);
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to add program";
@@ -115,8 +138,7 @@ export function useProgramsData() {
     }
 
     try {
-      await updateProgram(programId, data);
-      await fetchPrograms(); // Refresh the list
+      await editProgramMutation.mutateAsync({ programId, data });
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to update program";
@@ -130,8 +152,7 @@ export function useProgramsData() {
     }
 
     try {
-      await deleteProgram(programId);
-      await fetchPrograms(); // Refresh the list
+      await deleteProgramMutation.mutateAsync(programId);
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to delete program";
@@ -141,11 +162,16 @@ export function useProgramsData() {
 
   return {
     programs,
-    isLoading,
-    error,
+    isLoading: isLoading || authLoading,
+    error: error
+      ? error instanceof Error
+        ? error.message
+        : "Failed to fetch programs"
+      : null,
     addProgram,
     editProgram,
     removeProgram,
-    refreshPrograms: fetchPrograms,
+    refreshPrograms: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.programs }),
   };
 }
