@@ -1,10 +1,10 @@
-import { AdminLayout } from "@/components/layouts/AdminLayout";
+import { TeacherLayout } from "@/components/layouts/TeacherLayout";
 import { SettingsPageContent } from "@/components/commons/settings/SettingsPageContent";
 
-export default function TeacherSettingsPage() {
+export default function SettingsPage() {
   return (
-    <AdminLayout breadcrumbs={[{ label: "Settings" }]}>
+    <TeacherLayout breadcrumbs={[{ label: "Settings" }]}>
       <SettingsPageContent />
-    </AdminLayout>
+    </TeacherLayout>
   );
 }
