@@ -17,12 +17,24 @@ import type { Student, CreateStudentInput } from "../../types";
 export const createStudent = async (
   data: CreateStudentInput
 ): Promise<string> => {
-  // Auto-generate QR code if not provided
-  const qrCode = data.qr_code || data.student_id; // or use encryption logic
+  // Validate that QR code is provided and properly formatted
+  if (!data.qr_code) {
+    throw new Error(
+      "QR code is required. Please ensure the QR generation service is working."
+    );
+  }
+
+  // Validate QR code format (should be EVSU:STU:xxx:xxx)
+  const qrParts = data.qr_code.split(":");
+  if (qrParts.length !== 4 || qrParts[0] !== "EVSU" || qrParts[1] !== "STU") {
+    throw new Error(
+      `Invalid QR code format. Expected 'EVSU:STU:xxx:xxx', got '${data.qr_code}'`
+    );
+  }
 
   const docRef = await addDoc(collection(db, "students"), {
     ...data,
-    qr_code: qrCode,
+    qr_code: data.qr_code,
     created_at: serverTimestamp(),
   });
   return docRef.id;
@@ -77,6 +89,74 @@ export const getStudentByQRCode = async (
   if (querySnapshot.empty) return null;
   const doc = querySnapshot.docs[0];
   return { id: doc.id, ...doc.data() } as Student;
+};
+
+export const getStudentByEmail = async (
+  email: string
+): Promise<Student | null> => {
+  const q = query(collection(db, "students"), where("email", "==", email));
+  const querySnapshot = await getDocs(q);
+  if (querySnapshot.empty) return null;
+  const doc = querySnapshot.docs[0];
+  return { id: doc.id, ...doc.data() } as Student;
+};
+
+export const checkStudentExists = async (
+  studentId: string,
+  email?: string,
+  excludeDocId?: string
+): Promise<{
+  exists: boolean;
+  field?: "student_id" | "email";
+  existingStudent?: Student;
+}> => {
+  // Check student ID
+  const studentIdQuery = query(
+    collection(db, "students"),
+    where("student_id", "==", studentId)
+  );
+  const studentIdSnapshot = await getDocs(studentIdQuery);
+
+  if (!studentIdSnapshot.empty) {
+    const existingDoc = studentIdSnapshot.docs[0];
+    // If we're editing and it's the same document, don't count as duplicate
+    if (!excludeDocId || existingDoc.id !== excludeDocId) {
+      return {
+        exists: true,
+        field: "student_id",
+        existingStudent: {
+          id: existingDoc.id,
+          ...existingDoc.data(),
+        } as Student,
+      };
+    }
+  }
+
+  // Check email if provided
+  if (email && email.trim() !== "") {
+    const emailQuery = query(
+      collection(db, "students"),
+      where("email", "==", email)
+    );
+    const emailSnapshot = await getDocs(emailQuery);
+
+    if (!emailSnapshot.empty) {
+      const existingDoc = emailSnapshot.docs[0];
+      // If we're editing and it's the same document, don't count as duplicate
+      if (!excludeDocId || existingDoc.id !== excludeDocId) {
+        return {
+          exists: true,
+          field: "email",
+          existingStudent: {
+            id: existingDoc.id,
+            ...existingDoc.data(),
+          } as Student,
+        };
+      }
+    }
+  }
+
+  return { exists: false };
 };
 
 export const updateStudent = async (

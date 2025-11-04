@@ -53,10 +53,6 @@ export function LoginForm() {
         case "teacher":
           router.push("/teacher");
           break;
-        case "student":
-          // Student page not implemented yet
-          setError("Student access is not available yet");
-          break;
         default:
           setError("Invalid user role");
       }

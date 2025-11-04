@@ -1,8 +1,14 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Edit2, Trash2 } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Edit2, Trash2, Plus } from "lucide-react";
 import type { Program } from "@/lib/types/program";
 
 interface ProgramWithCounts extends Program {
@@ -43,6 +49,9 @@ export function ProgramsTable({
     <Card>
       <CardHeader>
         <CardTitle>All Programs</CardTitle>
+        <CardDescription>
+          {programs.length} program{programs.length !== 1 ? "s" : ""} found
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
@@ -71,19 +80,42 @@ export function ProgramsTable({
             </thead>
             <tbody>
               {programs.map((program) => (
-                <tr key={program.id} className="border-b hover:bg-muted/50">
-                  <td className="h-12 px-4 align-middle">{program.name}</td>
-                  <td className="h-12 px-4 align-middle">
-                    {program.abbreviation}
+                <tr
+                  key={program.id}
+                  className="border-b hover:bg-muted/50 transition-colors"
+                >
+                  <td className="h-12 px-4 align-middle font-medium">
+                    {program.name}
                   </td>
                   <td className="h-12 px-4 align-middle">
+                    <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                      {program.abbreviation}
+                    </span>
+                  </td>
+                  <td className="h-12 px-4 align-middle text-muted-foreground">
                     {program.academic_year}
                   </td>
                   <td className="h-12 px-4 align-middle text-center">
-                    {program.subjectsCount}
+                    <span
+                      className={
+                        program.subjectsCount > 0
+                          ? "font-medium"
+                          : "text-muted-foreground"
+                      }
+                    >
+                      {program.subjectsCount}
+                    </span>
                   </td>
                   <td className="h-12 px-4 align-middle text-center">
-                    {program.studentsCount}
+                    <span
+                      className={
+                        program.studentsCount > 0
+                          ? "font-medium"
+                          : "text-muted-foreground"
+                      }
+                    >
+                      {program.studentsCount}
+                    </span>
                   </td>
                   <td className="h-12 px-4 align-middle text-right">
                     <div className="flex items-center justify-end gap-2">
@@ -92,6 +124,7 @@ export function ProgramsTable({
                         size="sm"
                         onClick={() => onEdit(program)}
                         className="h-8 w-8 p-0"
+                        aria-label={`Edit ${program.name}`}
                       >
                         <Edit2 className="h-4 w-4" />
                       </Button>
@@ -99,7 +132,8 @@ export function ProgramsTable({
                         variant="ghost"
                         size="sm"
                         onClick={() => onDelete(program)}
-                        className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10"
+                        className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        aria-label={`Delete ${program.name}`}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
