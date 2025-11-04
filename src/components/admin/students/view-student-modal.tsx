@@ -31,23 +31,53 @@ export function ViewStudentModal({
   const [isRegenerating, setIsRegenerating] = useState(false);
 
   const handleDownloadPDF = () => {
-    const element = document.getElementById(
+    const svgElement = document.getElementById(
       "qr-code-view"
     ) as SVGElement | null;
-    if (!element) return;
+    if (!svgElement) return;
 
-    // Convert SVG to data URL
-    const svgData = new XMLSerializer().serializeToString(element);
+    // Convert SVG to PNG using canvas
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const svgData = new XMLSerializer().serializeToString(svgElement);
+    const img = new Image();
     const svgBlob = new Blob([svgData], {
       type: "image/svg+xml;charset=utf-8",
     });
     const url = URL.createObjectURL(svgBlob);
 
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${student.student_id}-qrcode.svg`;
-    link.click();
-    URL.revokeObjectURL(url);
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.fillStyle = "white";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const pngUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+
+        // Structured filename: EVSU_QR_StudentID_Name_Date.png
+        const date = new Date().toISOString().split("T")[0];
+        const sanitizedName =
+          `${student.first_name}_${student.last_name}`.replace(
+            /[^a-zA-Z0-9_]/g,
+            "_"
+          );
+        link.download = `EVSU_QR_${student.student_id}_${sanitizedName}_${date}.png`;
+
+        link.href = pngUrl;
+        link.click();
+
+        URL.revokeObjectURL(pngUrl);
+        URL.revokeObjectURL(url);
+      });
+    };
+
+    img.src = url;
   };
 
   const handlePrint = () => {

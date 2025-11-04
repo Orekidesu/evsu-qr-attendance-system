@@ -280,7 +280,7 @@ export function AddStudentModal({
           </div>
 
           <div className="bg-muted p-3 rounded-lg flex gap-2 text-sm">
-            <AlertCircle className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+            <AlertCircle className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
             <p>
               A unique QR code will be automatically generated for this student.
             </p>

@@ -207,6 +207,118 @@ export default function StudentPage() {
     }
   };
 
+  const handleBulkQRDownload = async () => {
+    try {
+      // Filter students based on selected program
+      const studentsToDownload =
+        selectedProgram === "all"
+          ? filteredAndSortedStudents
+          : filteredAndSortedStudents.filter(
+              (s) => s.program_id === selectedProgram
+            );
+
+      if (studentsToDownload.length === 0) {
+        toast.error("No Students Found", {
+          description: "No students to download QR codes for.",
+        });
+        return;
+      }
+
+      // Get program name for filename
+      const programName =
+        selectedProgram === "all"
+          ? "All_Programs"
+          : programs.find((p) => p.id === selectedProgram)?.abbreviation ||
+            "Unknown";
+
+      const date = new Date().toISOString().split("T")[0];
+
+      toast.info("Preparing QR Codes", {
+        description: `Generating ${studentsToDownload.length} QR codes. This may take a moment...`,
+      });
+
+      // Create a container for all QR codes (hidden)
+      const container = document.createElement("div");
+      container.style.position = "absolute";
+      container.style.left = "-9999px";
+      document.body.appendChild(container);
+
+      // Generate all QR codes as data URLs
+      const QRCode = (await import("qrcode")).default;
+      const qrPromises = studentsToDownload.map(async (student) => {
+        return new Promise<{ student: typeof student; dataUrl: string }>(
+          (resolve) => {
+            QRCode.toDataURL(
+              student.qr_code,
+              {
+                errorCorrectionLevel: "H",
+                margin: 2,
+                width: 250,
+              },
+              (err: Error | null | undefined, url: string) => {
+                if (err) {
+                  console.error(
+                    `Error generating QR for ${student.student_id}:`,
+                    err
+                  );
+                  resolve({ student, dataUrl: "" });
+                } else {
+                  resolve({ student, dataUrl: url });
+                }
+              }
+            );
+          }
+        );
+      });
+
+      const qrData = await Promise.all(qrPromises);
+      document.body.removeChild(container);
+
+      // Download using JSZip
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+      const folder = zip.folder(`EVSU_QR_Codes_${programName}_${date}`);
+
+      if (!folder) {
+        throw new Error("Failed to create zip folder");
+      }
+
+      // Add each QR code to zip
+      qrData.forEach(({ student, dataUrl }) => {
+        if (dataUrl) {
+          const sanitizedName =
+            `${student.first_name}_${student.last_name}`.replace(
+              /[^a-zA-Z0-9_]/g,
+              "_"
+            );
+          const filename = `EVSU_QR_${student.student_id}_${sanitizedName}.png`;
+
+          // Convert data URL to blob
+          const base64Data = dataUrl.split(",")[1];
+          folder.file(filename, base64Data, { base64: true });
+        }
+      });
+
+      // Generate and download zip
+      const content = await zip.generateAsync({ type: "blob" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(content);
+      link.download = `EVSU_QR_Codes_${programName}_${date}.zip`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+
+      toast.success("QR Codes Downloaded", {
+        description: `Successfully downloaded ${studentsToDownload.length} QR codes.`,
+      });
+    } catch (err) {
+      console.error("Bulk QR download error:", err);
+      toast.error("Download Failed", {
+        description:
+          err instanceof Error ? err.message : "Failed to download QR codes",
+      });
+    }
+  };
+
   const handleBulkImport = async (file: File, programId: string) => {
     setIsImporting(true);
     try {
@@ -242,8 +354,8 @@ export default function StudentPage() {
       // Parse students
       const students = lines
         .slice(1)
-        .filter((line) => line.trim() !== "") // Skip empty lines
-        .map((line) => {
+        .filter((line: string) => line.trim() !== "") // Skip empty lines
+        .map((line: string) => {
           const values = parseCSVLine(line);
           const student: Record<string, string> = {};
           headers.forEach((header, index) => {
@@ -286,7 +398,7 @@ export default function StudentPage() {
       setBulkImportModalOpen(false);
       // Refresh the list after import
       window.location.reload(); // Simple refresh for now
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Bulk import error:", err);
       const errorMessage =
         err instanceof Error ? err.message : "Failed to import students";
@@ -314,8 +426,10 @@ export default function StudentPage() {
           selectedProgram={selectedProgram}
           setSelectedProgram={setSelectedProgram}
           programs={programs}
+          students={filteredAndSortedStudents}
           onAddClick={() => setAddModalOpen(true)}
           onBulkImportClick={() => setBulkImportModalOpen(true)}
+          onBulkQRDownload={handleBulkQRDownload}
           studentsCount={filteredAndSortedStudents.length}
           isLoading={isLoading}
         />

@@ -49,7 +49,7 @@ export async function checkStudentExistsAdmin(
 ): Promise<{
   exists: boolean;
   field?: "student_id" | "email";
-  existingStudent?: any;
+  existingStudent?: Student;
 }> {
   const db = getAdminFirestore();
 
@@ -68,7 +68,7 @@ export async function checkStudentExistsAdmin(
       return {
         exists: true,
         field: "student_id",
-        existingStudent: { id: doc.id, ...doc.data() },
+        existingStudent: { id: doc.id, ...doc.data() } as Student,
       };
     }
   }
@@ -88,7 +88,7 @@ export async function checkStudentExistsAdmin(
         return {
           exists: true,
           field: "email",
-          existingStudent: { id: doc.id, ...doc.data() },
+          existingStudent: { id: doc.id, ...doc.data() } as Student,
         };
       }
     }

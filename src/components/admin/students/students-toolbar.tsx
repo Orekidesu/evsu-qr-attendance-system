@@ -9,8 +9,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Plus, Upload, Download } from "lucide-react";
+import { Search, Plus, Upload, Download, FileArchive } from "lucide-react";
 import type { Program } from "@/lib/types/program";
+import type { StudentWithDetails } from "@/hooks/useStudentsData";
 
 interface StudentsToolbarProps {
   searchQuery: string;
@@ -18,8 +19,10 @@ interface StudentsToolbarProps {
   selectedProgram: string;
   setSelectedProgram: (program: string) => void;
   programs: Program[];
+  students: StudentWithDetails[];
   onAddClick: () => void;
   onBulkImportClick?: () => void;
+  onBulkQRDownload?: () => void;
   studentsCount: number;
   isLoading?: boolean;
 }
@@ -30,8 +33,10 @@ export function StudentsToolbar({
   selectedProgram,
   setSelectedProgram,
   programs,
+  students,
   onAddClick,
   onBulkImportClick,
+  onBulkQRDownload,
   studentsCount,
   isLoading = false,
 }: StudentsToolbarProps) {
@@ -69,6 +74,7 @@ export function StudentsToolbar({
             variant="outline"
             onClick={handleDownloadTemplate}
             className="gap-2"
+            title="Download CSV template for bulk import"
           >
             <Download className="w-4 h-4" />
             Template
@@ -78,9 +84,21 @@ export function StudentsToolbar({
               variant="outline"
               onClick={onBulkImportClick}
               className="gap-2"
+              title="Import multiple students from CSV"
             >
               <Upload className="w-4 h-4" />
               Bulk Import
+            </Button>
+          )}
+          {onBulkQRDownload && studentsCount > 0 && (
+            <Button
+              variant="outline"
+              onClick={onBulkQRDownload}
+              className="gap-2"
+              title={`Download QR codes for ${selectedProgram === "all" ? "all students" : "selected program"}`}
+            >
+              <FileArchive className="w-4 h-4" />
+              Bulk QR
             </Button>
           )}
           <Button onClick={onAddClick} className="gap-2">
