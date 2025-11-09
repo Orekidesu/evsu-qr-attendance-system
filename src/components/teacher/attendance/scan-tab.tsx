@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Card,
   CardContent,
@@ -43,6 +43,10 @@ interface ScanTabProps {
   date: string;
 }
 
+// Debounce configuration
+const SCAN_COOLDOWN_MS = 2500; // 2.5 seconds between scans
+const DUPLICATE_SCAN_WINDOW_MS = 5000; // 5 seconds to prevent immediate duplicate
+
 export default function ScanTab({ subjectId, schedule, date }: ScanTabProps) {
   const {
     enrollmentsBySubject,
@@ -55,6 +59,11 @@ export default function ScanTab({ subjectId, schedule, date }: ScanTabProps) {
   const [scans, setScans] = useState<ScanRecord[]>([]);
   const [manualEntry, setManualEntry] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+
+  // Debounce and duplicate prevention refs
+  const lastScanTime = useRef<number>(0);
+  const recentlyScannedQRs = useRef<Map<string, number>>(new Map());
+  const scanCooldownTimer = useRef<NodeJS.Timeout | null>(null);
 
   const enrolledStudents = useMemo(
     () => enrollmentsBySubject.get(subjectId) || [],
@@ -106,9 +115,50 @@ export default function ScanTab({ subjectId, schedule, date }: ScanTabProps) {
     loadAttendance();
   }, [subjectId, date, enrolledStudents, fetchAttendance]);
 
+  // Cleanup debounce timers on unmount
+  useEffect(() => {
+    return () => {
+      if (scanCooldownTimer.current) {
+        clearTimeout(scanCooldownTimer.current);
+      }
+      // Clear old entries from recently scanned map
+      recentlyScannedQRs.current.clear();
+    };
+  }, []);
+
+  // Check if QR code was recently scanned
+  const isRecentlyScanned = useCallback((studentId: string): boolean => {
+    const now = Date.now();
+    const lastScanTimestamp = recentlyScannedQRs.current.get(studentId);
+
+    if (lastScanTimestamp) {
+      const timeSinceLastScan = now - lastScanTimestamp;
+      if (timeSinceLastScan < DUPLICATE_SCAN_WINDOW_MS) {
+        return true;
+      }
+      // Clean up old entry
+      recentlyScannedQRs.current.delete(studentId);
+    }
+
+    return false;
+  }, []);
+
+  // Check if scanner is in cooldown period
+  const isInCooldown = useCallback((): boolean => {
+    const now = Date.now();
+    const timeSinceLastScan = now - lastScanTime.current;
+    return timeSinceLastScan < SCAN_COOLDOWN_MS;
+  }, []);
+
   // Handle scanning a student (from QR or manual entry)
   const handleScan = useCallback(
-    async (studentIdInput: string) => {
+    async (studentIdInput: string, isQRScan: boolean = false) => {
+      // Debounce check for QR scans
+      if (isQRScan && isInCooldown()) {
+        // Silent ignore during cooldown
+        return;
+      }
+
       const student = enrolledStudents.find(
         (s: { student_id: string }) => s.student_id === studentIdInput
       );
@@ -120,15 +170,41 @@ export default function ScanTab({ subjectId, schedule, date }: ScanTabProps) {
         return;
       }
 
-      // Check if already scanned
+      // Check if already has attendance record for today/schedule
       if (scans.some((r) => r.studentId === student.id)) {
         toast.warning("Already Marked", {
-          description: `${student.first_name} ${student.last_name} already has attendance recorded`,
+          description: `${student.first_name} ${student.last_name} already has attendance recorded for this session`,
         });
         return;
       }
 
+      // Check if this QR was scanned very recently (rapid duplicate prevention)
+      if (isQRScan && isRecentlyScanned(student.id)) {
+        // Silent ignore - prevents duplicate toast spam
+        return;
+      }
+
       try {
+        // Update last scan time for debounce
+        if (isQRScan) {
+          lastScanTime.current = Date.now();
+          recentlyScannedQRs.current.set(student.id, Date.now());
+
+          // Set cooldown timer to clean up after window expires
+          if (scanCooldownTimer.current) {
+            clearTimeout(scanCooldownTimer.current);
+          }
+          scanCooldownTimer.current = setTimeout(() => {
+            const now = Date.now();
+            // Clean up entries older than the duplicate window
+            recentlyScannedQRs.current.forEach((timestamp, key) => {
+              if (now - timestamp > DUPLICATE_SCAN_WINDOW_MS) {
+                recentlyScannedQRs.current.delete(key);
+              }
+            });
+          }, DUPLICATE_SCAN_WINDOW_MS);
+        }
+
         // Determine if late
         const now = new Date();
         const scheduleStart = new Date();
@@ -173,7 +249,16 @@ export default function ScanTab({ subjectId, schedule, date }: ScanTabProps) {
         });
       }
     },
-    [enrolledStudents, scans, schedule, subjectId, date, recordAttendance]
+    [
+      enrolledStudents,
+      scans,
+      schedule,
+      subjectId,
+      date,
+      recordAttendance,
+      isInCooldown,
+      isRecentlyScanned,
+    ]
   );
 
   // Handle QR code scan with validation
@@ -196,7 +281,8 @@ export default function ScanTab({ subjectId, schedule, date }: ScanTabProps) {
           return;
         }
 
-        await handleScan(result.studentId);
+        // Pass true to indicate this is a QR scan (triggers debounce)
+        await handleScan(result.studentId, true);
       } catch (error) {
         console.error("QR validation error:", error);
         toast.error("Validation Error", {
@@ -218,7 +304,8 @@ export default function ScanTab({ subjectId, schedule, date }: ScanTabProps) {
 
   const handleManualEntry = () => {
     if (manualEntry.trim()) {
-      handleScan(manualEntry.trim().toUpperCase());
+      // Pass false to indicate manual entry (bypasses debounce cooldown)
+      handleScan(manualEntry.trim().toUpperCase(), false);
     }
   };
 
