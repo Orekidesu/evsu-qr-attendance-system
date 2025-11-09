@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Card,
   CardContent,
@@ -19,15 +19,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Video, Type, RotateCcw, X, Loader2 } from "lucide-react";
+import { Video, Type, RotateCcw, X, Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useAttendanceData } from "@/hooks/useAttendanceData";
+import { useCameraQR } from "@/hooks/useCameraQR";
 import type { Schedule } from "@/lib/types/subject";
 import type { AttendanceStatus, Attendance } from "@/lib/types/attendance";
-
-// Dynamic import for html5-qrcode will be used to avoid SSR issues
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Html5Qrcode = any;
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface ScanRecord {
   id: string;
@@ -56,11 +54,7 @@ export default function ScanTab({ subjectId, schedule, date }: ScanTabProps) {
 
   const [scans, setScans] = useState<ScanRecord[]>([]);
   const [manualEntry, setManualEntry] = useState("");
-  const [cameraActive, setCameraActive] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-
-  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
 
   const enrolledStudents = useMemo(
     () => enrollmentsBySubject.get(subjectId) || [],
@@ -112,180 +106,115 @@ export default function ScanTab({ subjectId, schedule, date }: ScanTabProps) {
     loadAttendance();
   }, [subjectId, date, enrolledStudents, fetchAttendance]);
 
-  // Cleanup camera on unmount
-  useEffect(() => {
-    return () => {
-      if (html5QrCodeRef.current && cameraActive) {
-        html5QrCodeRef.current
-          .stop()
-          .catch((err: Error) => console.error("Error stopping camera:", err));
-      }
-    };
-  }, [cameraActive]);
-
-  const startCamera = async () => {
-    try {
-      // Request camera permissions
-      try {
-        await navigator.mediaDevices.getUserMedia({ video: true });
-      } catch (permErr) {
-        console.error("Camera permission denied:", permErr);
-        toast.error("Camera Access Denied", {
-          description: "Please allow camera access in your browser settings",
-        });
-        return;
-      }
-
-      // Wait for DOM element
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      const element = document.getElementById("qr-reader");
-      if (!element) {
-        toast.error("Camera Error", {
-          description: "Unable to initialize camera. Please try again.",
-        });
-        return;
-      }
-
-      if (!html5QrCodeRef.current) {
-        const { Html5Qrcode } = await import("html5-qrcode");
-        html5QrCodeRef.current = new Html5Qrcode("qr-reader");
-      }
-
-      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-
-      await html5QrCodeRef.current.start(
-        { facingMode: "environment" },
-        config,
-        (decodedText: string) => {
-          handleQRScan(decodedText);
-        },
-        undefined
+  // Handle scanning a student (from QR or manual entry)
+  const handleScan = useCallback(
+    async (studentIdInput: string) => {
+      const student = enrolledStudents.find(
+        (s: { student_id: string }) => s.student_id === studentIdInput
       );
 
-      setCameraActive(true);
-    } catch (err) {
-      console.error("Error starting camera:", err);
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
-      toast.error("Failed to start camera", {
-        description: errorMessage.includes("NotAllowedError")
-          ? "Camera permission was denied."
-          : errorMessage.includes("NotFoundError")
-            ? "No camera found on this device."
-            : "Unable to access camera.",
-      });
-    }
-  };
-
-  const stopCamera = async () => {
-    try {
-      if (html5QrCodeRef.current && cameraActive) {
-        await html5QrCodeRef.current.stop();
-        setCameraActive(false);
-      }
-    } catch (err) {
-      console.error("Error stopping camera:", err);
-    }
-  };
-
-  const handleQRScan = async (qrCode: string) => {
-    if (isProcessing) return;
-    setIsProcessing(true);
-
-    try {
-      // Validate QR code via API
-      const response = await fetch("/api/qr/validate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ qrCode }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.valid) {
-        toast.error("Invalid QR Code", {
-          description: result.error || "QR code validation failed",
+      if (!student) {
+        toast.error("Not Enrolled", {
+          description: `Student ${studentIdInput} is not enrolled in this subject`,
         });
-        setIsProcessing(false);
         return;
       }
 
-      await handleScan(result.studentId);
-    } catch (error) {
-      console.error("QR validation error:", error);
-      toast.error("Validation Error", {
-        description: "Failed to validate QR code",
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+      // Check if already scanned
+      if (scans.some((r) => r.studentId === student.id)) {
+        toast.warning("Already Marked", {
+          description: `${student.first_name} ${student.last_name} already has attendance recorded`,
+        });
+        return;
+      }
 
-  const handleScan = async (studentIdInput: string) => {
-    const student = enrolledStudents.find(
-      (s: { student_id: string }) => s.student_id === studentIdInput
-    );
+      try {
+        // Determine if late
+        const now = new Date();
+        const scheduleStart = new Date();
+        const [startHour, startMinute] = schedule.time_start
+          .split(":")
+          .map(Number);
+        scheduleStart.setHours(startHour, startMinute, 0);
 
-    if (!student) {
-      toast.error("Not Enrolled", {
-        description: `Student ${studentIdInput} is not enrolled in this subject`,
-      });
-      return;
-    }
+        const isLate = now > scheduleStart;
+        const status: AttendanceStatus = isLate ? "Late" : "Present";
 
-    // Check if already scanned
-    if (scans.some((r) => r.studentId === student.id)) {
-      toast.warning("Already Marked", {
-        description: `${student.first_name} ${student.last_name} already has attendance recorded`,
-      });
-      return;
-    }
+        // Save to Firestore
+        const attendanceId = await recordAttendance(subjectId, {
+          student_id: student.id,
+          date,
+          status,
+          schedule,
+        });
 
-    try {
-      // Determine if late (you can customize this logic)
-      const now = new Date();
-      const scheduleStart = new Date();
-      const [startHour, startMinute] = schedule.time_start
-        .split(":")
-        .map(Number);
-      scheduleStart.setHours(startHour, startMinute, 0);
+        const newRecord: ScanRecord = {
+          id: attendanceId,
+          studentId: student.id,
+          student_id: student.student_id,
+          name: `${student.first_name} ${student.last_name}`,
+          time: now.toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          status,
+          attendanceId,
+        };
 
-      const isLate = now > scheduleStart;
-      const status: AttendanceStatus = isLate ? "Late" : "Present";
+        setScans([newRecord, ...scans]);
+        toast.success("Attendance Marked", {
+          description: `${newRecord.name} marked as ${status}`,
+        });
+        setManualEntry("");
+      } catch (error) {
+        console.error("Error recording attendance:", error);
+        toast.error("Failed to Record", {
+          description: "Failed to save attendance record",
+        });
+      }
+    },
+    [enrolledStudents, scans, schedule, subjectId, date, recordAttendance]
+  );
 
-      // Save to Firestore
-      const attendanceId = await recordAttendance(subjectId, {
-        student_id: student.id,
-        date,
-        status,
-        schedule,
-      });
+  // Handle QR code scan with validation
+  const handleQRScan = useCallback(
+    async (qrCode: string) => {
+      try {
+        // Validate QR code via API
+        const response = await fetch("/api/qr/validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ qrCode }),
+        });
 
-      const newRecord: ScanRecord = {
-        id: attendanceId,
-        studentId: student.id,
-        student_id: student.student_id,
-        name: `${student.first_name} ${student.last_name}`,
-        time: now.toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        status,
-        attendanceId,
-      };
+        const result = await response.json();
 
-      setScans([newRecord, ...scans]);
-      toast.success("Attendance Marked", {
-        description: `${newRecord.name} marked as ${status}`,
-      });
-      setManualEntry("");
-    } catch (error) {
-      console.error("Error recording attendance:", error);
-      toast.error("Failed to Record", {
-        description: "Failed to save attendance record",
-      });
-    }
-  };
+        if (!response.ok || !result.valid) {
+          toast.error("Invalid QR Code", {
+            description: result.error || "QR code validation failed",
+          });
+          return;
+        }
+
+        await handleScan(result.studentId);
+      } catch (error) {
+        console.error("QR validation error:", error);
+        toast.error("Validation Error", {
+          description: "Failed to validate QR code",
+        });
+      }
+    },
+    [handleScan]
+  );
+
+  // Initialize camera with custom hook
+  const camera = useCameraQR({
+    elementId: "qr-reader",
+    onScan: handleQRScan,
+    fps: 10,
+    qrboxSize: { width: 250, height: 250 },
+    debugMode: process.env.NODE_ENV === "development",
+  });
 
   const handleManualEntry = () => {
     if (manualEntry.trim()) {
@@ -411,33 +340,57 @@ export default function ScanTab({ subjectId, schedule, date }: ScanTabProps) {
         <Card>
           <CardHeader>
             <CardTitle>QR Camera Viewfinder</CardTitle>
+            <CardDescription>
+              {camera.isActive
+                ? "Camera is active - point at QR code to scan"
+                : "Start camera to begin scanning"}
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="bg-muted rounded-lg aspect-video flex items-center justify-center border-2 border-dashed">
-              {cameraActive ? (
-                <div className="text-center">
-                  <Video className="w-12 h-12 mx-auto text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground">Camera Active</p>
-                </div>
-              ) : (
+            {/* Camera Status Display */}
+            {!camera.isActive && !camera.isInitializing && (
+              <div className="bg-muted rounded-lg aspect-video flex items-center justify-center border-2 border-dashed">
                 <div className="text-center">
                   <Video className="w-12 h-12 mx-auto text-muted-foreground mb-2" />
                   <p className="text-sm text-muted-foreground">
                     Point camera at QR code
                   </p>
+                  {camera.error && (
+                    <p className="text-xs text-destructive mt-2">
+                      {camera.error}
+                    </p>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
+            {/* Initializing State */}
+            {camera.isInitializing && (
+              <div className="bg-muted rounded-lg aspect-video flex items-center justify-center border-2 border-dashed">
+                <div className="text-center">
+                  <Loader2 className="w-12 h-12 mx-auto text-primary animate-spin mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    Initializing camera...
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Control Buttons */}
             <div className="grid grid-cols-2 gap-2 mt-4">
               <Button
-                variant={cameraActive ? "destructive" : "default"}
-                onClick={cameraActive ? stopCamera : startCamera}
-                disabled={isProcessing}
+                variant={camera.isActive ? "destructive" : "default"}
+                onClick={
+                  camera.isActive ? camera.stopCamera : camera.startCamera
+                }
+                disabled={camera.isInitializing || camera.isProcessing}
               >
                 <Video className="w-4 h-4 mr-2" />
-                {cameraActive ? "Stop Camera" : "Start Camera"}
+                {camera.isInitializing
+                  ? "Initializing..."
+                  : camera.isActive
+                    ? "Stop Camera"
+                    : "Start Camera"}
               </Button>
               <Button variant="outline" disabled>
                 <Type className="w-4 h-4 mr-2" />
@@ -446,20 +399,45 @@ export default function ScanTab({ subjectId, schedule, date }: ScanTabProps) {
             </div>
 
             {/* Camera View */}
-            {cameraActive && (
+            {camera.isActive && (
               <div className="mt-4">
                 <div
                   id="qr-reader"
-                  className="w-full max-w-md mx-auto border-2 border-dashed border-gray-300 rounded-lg overflow-hidden"
+                  className="w-full max-w-md mx-auto border-2 border-primary rounded-lg overflow-hidden"
                   style={{ minHeight: "300px" }}
                 />
-                {isProcessing && (
-                  <div className="text-center text-sm text-muted-foreground mt-2">
+                {camera.isProcessing && (
+                  <div className="text-center text-sm text-muted-foreground mt-2 flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
                     Processing scan...
                   </div>
                 )}
               </div>
             )}
+
+            {/* Capability Warnings */}
+            {!camera.capabilities.isSecureContext && (
+              <Alert variant="destructive" className="mt-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Security Warning</AlertTitle>
+                <AlertDescription>
+                  Camera access requires HTTPS connection. Please use HTTPS or
+                  localhost.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {camera.capabilities.availableCameras === 0 &&
+              !camera.isInitializing && (
+                <Alert variant="destructive" className="mt-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>No Camera Detected</AlertTitle>
+                  <AlertDescription>
+                    No camera devices found. Please connect a camera or check
+                    your device settings.
+                  </AlertDescription>
+                </Alert>
+              )}
 
             {/* Manual Entry Input */}
             <div className="mt-4 space-y-2">
