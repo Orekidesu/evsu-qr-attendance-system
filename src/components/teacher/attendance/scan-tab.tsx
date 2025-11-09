@@ -347,34 +347,54 @@ export default function ScanTab({ subjectId, schedule, date }: ScanTabProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Camera Status Display */}
-            {!camera.isActive && !camera.isInitializing && (
-              <div className="bg-muted rounded-lg aspect-video flex items-center justify-center border-2 border-dashed">
-                <div className="text-center">
-                  <Video className="w-12 h-12 mx-auto text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Point camera at QR code
-                  </p>
-                  {camera.error && (
-                    <p className="text-xs text-destructive mt-2">
-                      {camera.error}
+            {/* Camera View Container - Always rendered for DOM access */}
+            <div className="relative">
+              {/* Camera Status Display */}
+              {!camera.isActive && !camera.isInitializing && (
+                <div className="bg-muted rounded-lg aspect-video flex items-center justify-center border-2 border-dashed">
+                  <div className="text-center">
+                    <Video className="w-12 h-12 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      Point camera at QR code
                     </p>
-                  )}
+                    {camera.error && (
+                      <p className="text-xs text-destructive mt-2">
+                        {camera.error}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Initializing State */}
-            {camera.isInitializing && (
-              <div className="bg-muted rounded-lg aspect-video flex items-center justify-center border-2 border-dashed">
-                <div className="text-center">
-                  <Loader2 className="w-12 h-12 mx-auto text-primary animate-spin mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Initializing camera...
-                  </p>
+              {/* Initializing State */}
+              {camera.isInitializing && (
+                <div className="bg-muted rounded-lg aspect-video flex items-center justify-center border-2 border-dashed">
+                  <div className="text-center">
+                    <Loader2 className="w-12 h-12 mx-auto text-primary animate-spin mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      Initializing camera...
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+
+              {/* QR Reader Element - Always in DOM, visibility controlled by CSS */}
+              <div
+                id="qr-reader"
+                className={`... ${
+                  camera.isActive
+                    ? "relative z-10 border-primary opacity-100"
+                    : "absolute inset-0 opacity-0 pointer-events-none"
+                }`}
+              />
+              {/* Processing Indicator */}
+              {camera.isProcessing && (
+                <div className="text-center text-sm text-muted-foreground mt-2 flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Processing scan...
+                </div>
+              )}
+            </div>
 
             {/* Control Buttons */}
             <div className="grid grid-cols-2 gap-2 mt-4">
@@ -397,23 +417,6 @@ export default function ScanTab({ subjectId, schedule, date }: ScanTabProps) {
                 Manual Entry
               </Button>
             </div>
-
-            {/* Camera View */}
-            {camera.isActive && (
-              <div className="mt-4">
-                <div
-                  id="qr-reader"
-                  className="w-full max-w-md mx-auto border-2 border-primary rounded-lg overflow-hidden"
-                  style={{ minHeight: "300px" }}
-                />
-                {camera.isProcessing && (
-                  <div className="text-center text-sm text-muted-foreground mt-2 flex items-center justify-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Processing scan...
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* Capability Warnings */}
             {!camera.capabilities.isSecureContext && (

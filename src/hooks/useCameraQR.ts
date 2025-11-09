@@ -63,6 +63,7 @@ export function useCameraQR({
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scanCallbackRef = useRef(onScan);
+  const isScannerRunning = useRef<boolean>(false);
 
   // Update callback ref when onScan changes
   useEffect(() => {
@@ -135,17 +136,18 @@ export function useCameraQR({
     }
 
     try {
-      // Request permission and get stream
+      // Just check permission without keeping stream
+      // html5-qrcode will handle the actual camera access
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: "environment",
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
         },
       });
 
       log("Camera permission granted");
-      streamRef.current = stream;
+
+      // Stop the test stream immediately - html5-qrcode will create its own
+      stream.getTracks().forEach((track) => track.stop());
 
       setState((prev) => ({
         ...prev,
@@ -353,6 +355,8 @@ export function useCameraQR({
         }
       );
 
+      // Mark scanner as running
+      isScannerRunning.current = true;
       log("Camera started successfully");
 
       setState((prev) => ({
@@ -410,9 +414,23 @@ export function useCameraQR({
     log("Stopping camera...");
 
     try {
-      if (html5QrCodeRef.current && state.isActive) {
-        await html5QrCodeRef.current.stop();
-        log("Html5Qrcode stopped");
+      // Only stop if scanner is actually running
+      if (html5QrCodeRef.current && isScannerRunning.current) {
+        try {
+          await html5QrCodeRef.current.stop();
+          isScannerRunning.current = false;
+          log("Html5Qrcode stopped");
+        } catch (stopErr) {
+          // Ignore "not running" errors
+          const error = stopErr as Error;
+          if (
+            !error.message?.includes("not running") &&
+            !error.message?.includes("not paused")
+          ) {
+            throw stopErr;
+          }
+          log("Scanner was already stopped");
+        }
       }
 
       // Stop media stream tracks
@@ -434,29 +452,41 @@ export function useCameraQR({
     } catch (err) {
       logError("Error stopping camera", err);
       // Force state update even on error
+      isScannerRunning.current = false;
       setState((prev) => ({
         ...prev,
         isActive: false,
       }));
     }
-  }, [state.isActive, log, logError]);
+  }, [log, logError]);
 
   /**
    * Cleanup on unmount
    */
   useEffect(() => {
     return () => {
-      if (html5QrCodeRef.current && state.isActive) {
+      if (html5QrCodeRef.current && isScannerRunning.current) {
         html5QrCodeRef.current
           .stop()
-          .catch((err: Error) => console.error("Cleanup error:", err));
+          .then(() => {
+            isScannerRunning.current = false;
+          })
+          .catch((err: Error) => {
+            // Ignore "not running" errors on cleanup
+            if (
+              !err.message?.includes("not running") &&
+              !err.message?.includes("not paused")
+            ) {
+              console.error("Cleanup error:", err);
+            }
+          });
       }
 
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
       }
     };
-  }, [state.isActive]);
+  }, []);
 
   /**
    * Check capabilities on mount
