@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Download } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Download } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -17,14 +17,14 @@ import {
   PieChart,
   Pie,
   Cell,
-} from "recharts"
+} from "recharts";
 
 const attendanceData = [
   { date: "Nov 1", present: 28, late: 1, absent: 1 },
   { date: "Nov 2", present: 27, late: 2, absent: 1 },
   { date: "Nov 3", present: 29, late: 0, absent: 1 },
   { date: "Nov 4", present: 30, late: 0, absent: 0 },
-]
+];
 
 const studentData = [
   { name: "John Doe", present: 4, late: 0, absent: 0 },
@@ -32,19 +32,22 @@ const studentData = [
   { name: "Mike Johnson", present: 3, late: 1, absent: 0 },
   { name: "Sarah Williams", present: 3, late: 0, absent: 1 },
   { name: "Tom Brown", present: 4, late: 0, absent: 0 },
-]
+];
 
 const overallStats = [
   { name: "Present", value: 114, color: "#10b981" },
   { name: "Late", value: 3, color: "#f59e0b" },
   { name: "Absent", value: 3, color: "#ef4444" },
-]
+];
 
-export default function StatsTab({ subject }: { subject: string }) {
-  const totalClasses = 4
-  const totalStudents = 30
-  const totalAttendance = 114
-  const overallRate = ((totalAttendance / (totalClasses * totalStudents)) * 100).toFixed(1)
+export default function StatsTab({ subjectId }: { subjectId: string }) {
+  const totalClasses = 4;
+  const totalStudents = 30;
+  const totalAttendance = 114;
+  const overallRate = (
+    (totalAttendance / (totalClasses * totalStudents)) *
+    100
+  ).toFixed(1);
 
   return (
     <div className="space-y-4">
@@ -52,25 +55,37 @@ export default function StatsTab({ subject }: { subject: string }) {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Overall Attendance Rate</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Overall Attendance Rate
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">{overallRate}%</p>
-            <p className="text-xs text-muted-foreground mt-1">120 out of 120 sessions</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              120 out of 120 sessions
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Present</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Present
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-green-600">{totalAttendance}</p>
-            <p className="text-xs text-muted-foreground mt-1">Out of {totalClasses * totalStudents}</p>
+            <p className="text-3xl font-bold text-green-600">
+              {totalAttendance}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Out of {totalClasses * totalStudents}
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Late</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Late
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold text-yellow-600">3</p>
@@ -79,7 +94,9 @@ export default function StatsTab({ subject }: { subject: string }) {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Absent</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Absent
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold text-red-600">3</p>
@@ -124,7 +141,11 @@ export default function StatsTab({ subject }: { subject: string }) {
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={({ name, value, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  label={(props: { name?: string; percent?: number }) =>
+                    props.name && props.percent !== undefined
+                      ? `${props.name}: ${(props.percent * 100).toFixed(0)}%`
+                      : ""
+                  }
                   outerRadius={100}
                   fill="#8884d8"
                   dataKey="value"
@@ -173,5 +194,5 @@ export default function StatsTab({ subject }: { subject: string }) {
         </Button>
       </div>
     </div>
-  )
+  );
 }

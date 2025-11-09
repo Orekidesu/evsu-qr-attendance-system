@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   Card,
   CardContent,
@@ -19,94 +19,389 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Video, Type, Upload, RotateCcw, X } from "lucide-react";
+import { Video, Type, RotateCcw, X, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { useAttendanceData } from "@/hooks/useAttendanceData";
+import type { Schedule } from "@/lib/types/subject";
+import type { AttendanceStatus, Attendance } from "@/lib/types/attendance";
+
+// Dynamic import for html5-qrcode will be used to avoid SSR issues
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Html5Qrcode = any;
 
 interface ScanRecord {
   id: string;
   studentId: string;
+  student_id: string;
   name: string;
   time: string;
-  status: "present" | "late" | "absent";
+  status: AttendanceStatus;
+  attendanceId: string;
 }
 
-const initialScans: ScanRecord[] = [
-  {
-    id: "1",
-    studentId: "S001",
-    name: "John Doe",
-    time: "09:05 AM",
-    status: "present",
-  },
-  {
-    id: "2",
-    studentId: "S002",
-    name: "Jane Smith",
-    time: "09:08 AM",
-    status: "present",
-  },
-  {
-    id: "3",
-    studentId: "S003",
-    name: "Mike Johnson",
-    time: "09:25 AM",
-    status: "late",
-  },
-];
-
-export default function ScanTab({
-  subject,
-  date,
-  session,
-}: {
-  subject: string;
+interface ScanTabProps {
+  subjectId: string;
+  schedule: Schedule;
   date: string;
-  session: string;
-}) {
-  const [scans, setScans] = useState<ScanRecord[]>(initialScans);
+}
+
+export default function ScanTab({ subjectId, schedule, date }: ScanTabProps) {
+  const {
+    enrollmentsBySubject,
+    recordAttendance,
+    modifyAttendance,
+    removeAttendance,
+    fetchAttendance,
+  } = useAttendanceData();
+
+  const [scans, setScans] = useState<ScanRecord[]>([]);
   const [manualEntry, setManualEntry] = useState("");
   const [cameraActive, setCameraActive] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const totalStudents = 30;
-  const presentCount = scans.filter((s) => s.status === "present").length;
-  const lateCount = scans.filter((s) => s.status === "late").length;
+  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+
+  const enrolledStudents = useMemo(
+    () => enrollmentsBySubject.get(subjectId) || [],
+    [subjectId, enrollmentsBySubject]
+  );
+
+  const totalStudents = enrolledStudents.length;
+  const presentCount = scans.filter((s) => s.status === "Present").length;
+  const lateCount = scans.filter((s) => s.status === "Late").length;
   const absentCount = totalStudents - presentCount - lateCount;
 
-  const handleManualEntry = () => {
-    if (manualEntry.trim()) {
-      const newScan: ScanRecord = {
-        id: String(scans.length + 1),
-        studentId: manualEntry,
-        name: `Student ${manualEntry}`,
-        time: new Date().toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        status: "present",
-      };
-      setScans([newScan, ...scans]);
-      setManualEntry("");
+  // Load existing attendance records
+  useEffect(() => {
+    const loadAttendance = async () => {
+      setIsLoading(true);
+      try {
+        const records = await fetchAttendance(subjectId, date);
+        const mappedRecords: ScanRecord[] = records.map(
+          (record: Attendance) => {
+            const student = enrolledStudents.find(
+              (s: { id: string }) => s.id === record.student_id
+            );
+            return {
+              id: record.id,
+              studentId: record.student_id,
+              student_id: student?.student_id || "Unknown",
+              name: student
+                ? `${student.first_name} ${student.last_name}`
+                : "Unknown Student",
+              time:
+                record.timestamp?.toDate?.()?.toLocaleTimeString("en-US", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }) || "Unknown",
+              status: record.status,
+              attendanceId: record.id,
+            };
+          }
+        );
+        setScans(mappedRecords);
+      } catch (error) {
+        console.error("Error loading attendance:", error);
+        toast.error("Failed to load attendance records");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadAttendance();
+  }, [subjectId, date, enrolledStudents, fetchAttendance]);
+
+  // Cleanup camera on unmount
+  useEffect(() => {
+    return () => {
+      if (html5QrCodeRef.current && cameraActive) {
+        html5QrCodeRef.current
+          .stop()
+          .catch((err: Error) => console.error("Error stopping camera:", err));
+      }
+    };
+  }, [cameraActive]);
+
+  const startCamera = async () => {
+    try {
+      // Request camera permissions
+      try {
+        await navigator.mediaDevices.getUserMedia({ video: true });
+      } catch (permErr) {
+        console.error("Camera permission denied:", permErr);
+        toast.error("Camera Access Denied", {
+          description: "Please allow camera access in your browser settings",
+        });
+        return;
+      }
+
+      // Wait for DOM element
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const element = document.getElementById("qr-reader");
+      if (!element) {
+        toast.error("Camera Error", {
+          description: "Unable to initialize camera. Please try again.",
+        });
+        return;
+      }
+
+      if (!html5QrCodeRef.current) {
+        const { Html5Qrcode } = await import("html5-qrcode");
+        html5QrCodeRef.current = new Html5Qrcode("qr-reader");
+      }
+
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+      await html5QrCodeRef.current.start(
+        { facingMode: "environment" },
+        config,
+        (decodedText: string) => {
+          handleQRScan(decodedText);
+        },
+        undefined
+      );
+
+      setCameraActive(true);
+    } catch (err) {
+      console.error("Error starting camera:", err);
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      toast.error("Failed to start camera", {
+        description: errorMessage.includes("NotAllowedError")
+          ? "Camera permission was denied."
+          : errorMessage.includes("NotFoundError")
+            ? "No camera found on this device."
+            : "Unable to access camera.",
+      });
     }
   };
 
-  const changeStatus = (
-    id: string,
-    newStatus: "present" | "late" | "absent"
+  const stopCamera = async () => {
+    try {
+      if (html5QrCodeRef.current && cameraActive) {
+        await html5QrCodeRef.current.stop();
+        setCameraActive(false);
+      }
+    } catch (err) {
+      console.error("Error stopping camera:", err);
+    }
+  };
+
+  const handleQRScan = async (qrCode: string) => {
+    if (isProcessing) return;
+    setIsProcessing(true);
+
+    try {
+      // Validate QR code via API
+      const response = await fetch("/api/qr/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ qrCode }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.valid) {
+        toast.error("Invalid QR Code", {
+          description: result.error || "QR code validation failed",
+        });
+        setIsProcessing(false);
+        return;
+      }
+
+      await handleScan(result.studentId);
+    } catch (error) {
+      console.error("QR validation error:", error);
+      toast.error("Validation Error", {
+        description: "Failed to validate QR code",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleScan = async (studentIdInput: string) => {
+    const student = enrolledStudents.find(
+      (s: { student_id: string }) => s.student_id === studentIdInput
+    );
+
+    if (!student) {
+      toast.error("Not Enrolled", {
+        description: `Student ${studentIdInput} is not enrolled in this subject`,
+      });
+      return;
+    }
+
+    // Check if already scanned
+    if (scans.some((r) => r.studentId === student.id)) {
+      toast.warning("Already Marked", {
+        description: `${student.first_name} ${student.last_name} already has attendance recorded`,
+      });
+      return;
+    }
+
+    try {
+      // Determine if late (you can customize this logic)
+      const now = new Date();
+      const scheduleStart = new Date();
+      const [startHour, startMinute] = schedule.time_start
+        .split(":")
+        .map(Number);
+      scheduleStart.setHours(startHour, startMinute, 0);
+
+      const isLate = now > scheduleStart;
+      const status: AttendanceStatus = isLate ? "Late" : "Present";
+
+      // Save to Firestore
+      const attendanceId = await recordAttendance(subjectId, {
+        student_id: student.id,
+        date,
+        status,
+        schedule,
+      });
+
+      const newRecord: ScanRecord = {
+        id: attendanceId,
+        studentId: student.id,
+        student_id: student.student_id,
+        name: `${student.first_name} ${student.last_name}`,
+        time: now.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        status,
+        attendanceId,
+      };
+
+      setScans([newRecord, ...scans]);
+      toast.success("Attendance Marked", {
+        description: `${newRecord.name} marked as ${status}`,
+      });
+      setManualEntry("");
+    } catch (error) {
+      console.error("Error recording attendance:", error);
+      toast.error("Failed to Record", {
+        description: "Failed to save attendance record",
+      });
+    }
+  };
+
+  const handleManualEntry = () => {
+    if (manualEntry.trim()) {
+      handleScan(manualEntry.trim().toUpperCase());
+    }
+  };
+
+  const changeStatus = async (
+    attendanceId: string,
+    newStatus: AttendanceStatus
   ) => {
-    setScans(scans.map((s) => (s.id === id ? { ...s, status: newStatus } : s)));
+    try {
+      await modifyAttendance(subjectId, attendanceId, { status: newStatus });
+      setScans(
+        scans.map((s) =>
+          s.attendanceId === attendanceId ? { ...s, status: newStatus } : s
+        )
+      );
+      toast.success("Status Updated", {
+        description: `Attendance status changed to ${newStatus}`,
+      });
+    } catch (error) {
+      console.error("Error updating status:", error);
+      toast.error("Failed to update status");
+    }
   };
 
-  const undoScan = (id: string) => {
-    setScans(scans.filter((s) => s.id !== id));
+  const undoScan = async (attendanceId: string) => {
+    try {
+      await removeAttendance(subjectId, attendanceId);
+      setScans(scans.filter((s) => s.attendanceId !== attendanceId));
+      toast.success("Record Removed", {
+        description: "Attendance record removed",
+      });
+    } catch (error) {
+      console.error("Error removing attendance:", error);
+      toast.error("Failed to remove record");
+    }
   };
 
-  const clearAll = () => {
-    setScans([]);
+  const clearAll = async () => {
+    try {
+      await Promise.all(
+        scans.map((scan) => removeAttendance(subjectId, scan.attendanceId))
+      );
+      setScans([]);
+      toast.success("All records cleared");
+    } catch (error) {
+      console.error("Error clearing records:", error);
+      toast.error("Failed to clear records");
+    }
   };
 
-  const markRemainingAbsent = () => {
-    // In a real app, this would mark all non-scanned students as absent
-    alert(`Marked ${absentCount} students as absent`);
+  const markRemainingAbsent = async () => {
+    const notScannedStudents = enrolledStudents.filter(
+      (student: { id: string }) =>
+        !scans.some((s) => s.studentId === student.id)
+    );
+
+    if (notScannedStudents.length === 0) {
+      toast.info("All students have been marked");
+      return;
+    }
+
+    try {
+      const newRecords: ScanRecord[] = [];
+
+      for (const student of notScannedStudents) {
+        const attendanceId = await recordAttendance(subjectId, {
+          student_id: student.id,
+          date,
+          status: "Absent",
+          schedule,
+        });
+
+        newRecords.push({
+          id: attendanceId,
+          studentId: student.id,
+          student_id: student.student_id,
+          name: `${student.first_name} ${student.last_name}`,
+          time: new Date().toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          status: "Absent",
+          attendanceId,
+        });
+      }
+
+      setScans([...scans, ...newRecords]);
+      toast.success(`Marked ${notScannedStudents.length} students as absent`);
+    } catch (error) {
+      console.error("Error marking absent:", error);
+      toast.error("Failed to mark students as absent");
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (enrolledStudents.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center">
+          <p className="text-muted-foreground">
+            No students enrolled in this subject
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -135,22 +430,36 @@ export default function ScanTab({
             </div>
 
             {/* Control Buttons */}
-            <div className="grid grid-cols-3 gap-2 mt-4">
+            <div className="grid grid-cols-2 gap-2 mt-4">
               <Button
                 variant={cameraActive ? "destructive" : "default"}
-                onClick={() => setCameraActive(!cameraActive)}
+                onClick={cameraActive ? stopCamera : startCamera}
+                disabled={isProcessing}
               >
-                {cameraActive ? "Stop" : "Start"} Camera
+                <Video className="w-4 h-4 mr-2" />
+                {cameraActive ? "Stop Camera" : "Start Camera"}
               </Button>
-              <Button variant="outline">
+              <Button variant="outline" disabled>
                 <Type className="w-4 h-4 mr-2" />
                 Manual Entry
               </Button>
-              <Button variant="outline">
-                <Upload className="w-4 h-4 mr-2" />
-                Bulk Import
-              </Button>
             </div>
+
+            {/* Camera View */}
+            {cameraActive && (
+              <div className="mt-4">
+                <div
+                  id="qr-reader"
+                  className="w-full max-w-md mx-auto border-2 border-dashed border-gray-300 rounded-lg overflow-hidden"
+                  style={{ minHeight: "300px" }}
+                />
+                {isProcessing && (
+                  <div className="text-center text-sm text-muted-foreground mt-2">
+                    Processing scan...
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Manual Entry Input */}
             <div className="mt-4 space-y-2">
@@ -197,20 +506,20 @@ export default function ScanTab({
                       value={scan.status}
                       onChange={(e) =>
                         changeStatus(
-                          scan.id,
-                          e.target.value as "present" | "late" | "absent"
+                          scan.attendanceId,
+                          e.target.value as AttendanceStatus
                         )
                       }
                       className="text-xs px-2 py-1 border rounded"
                     >
-                      <option value="present">Present</option>
-                      <option value="late">Late</option>
-                      <option value="absent">Absent</option>
+                      <option value="Present">Present</option>
+                      <option value="Late">Late</option>
+                      <option value="Absent">Absent</option>
                     </select>
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => undoScan(scan.id)}
+                      onClick={() => undoScan(scan.attendanceId)}
                       className="ml-2"
                     >
                       <RotateCcw className="w-4 h-4" />

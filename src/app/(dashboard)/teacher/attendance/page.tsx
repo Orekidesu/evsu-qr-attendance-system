@@ -1,7 +1,7 @@
 "use client";
 
 import { TeacherLayout } from "@/components/layouts/TeacherLayout";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -10,27 +10,96 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Calendar, Video, Type } from "lucide-react";
+import { Calendar, Video, Type, Loader2, AlertCircle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import ScanTab from "@/components/teacher/attendance/scan-tab";
 import ListTab from "@/components/teacher/attendance/list-tab";
 import StatsTab from "@/components/teacher/attendance/stats-tab";
+import { useAttendanceData } from "@/hooks/useAttendanceData";
+
+const DAYS_MAP: Record<string, string> = {
+  Mon: "Monday",
+  Tue: "Tuesday",
+  Wed: "Wednesday",
+  Thu: "Thursday",
+  Fri: "Friday",
+  Sat: "Saturday",
+  Sun: "Sunday",
+};
 
 export default function AttendancePage() {
-  const [subject, setSubject] = useState("IT101");
+  const [selectedSubjectId, setSelectedSubjectId] = useState("");
+  const [selectedScheduleIndex, setSelectedScheduleIndex] = useState<number>(0);
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [session, setSession] = useState("morning");
   const [activeTab, setActiveTab] = useState("scan");
 
-  const subjects = [
-    { id: "IT101", name: "IT101: Intro to Programming" },
-    { id: "IT102", name: "IT102: Web Development" },
-    { id: "IT103", name: "IT103: Database Design" },
-  ];
+  const { subjects, isLoading, error } = useAttendanceData();
 
-  const scheduleInfo = {
-    day: "Monday",
-    time: "09:00 AM - 10:30 AM",
-  };
+  // Find selected subject
+  const selectedSubject = useMemo(
+    () => subjects.find((s) => s.id === selectedSubjectId),
+    [subjects, selectedSubjectId]
+  );
+
+  // Get selected schedule
+  const selectedSchedule = useMemo(
+    () => selectedSubject?.schedules[selectedScheduleIndex] || null,
+    [selectedSubject, selectedScheduleIndex]
+  );
+
+  // Format schedule info
+  const scheduleInfo = useMemo(() => {
+    if (!selectedSchedule) return null;
+
+    const days = selectedSchedule.days.map((d) => DAYS_MAP[d] || d).join(", ");
+    const time = `${selectedSchedule.time_start} - ${selectedSchedule.time_end}`;
+
+    return { days, time };
+  }, [selectedSchedule]);
+
+  // Auto-select first subject if none selected
+  useState(() => {
+    if (subjects.length > 0 && !selectedSubjectId) {
+      setSelectedSubjectId(subjects[0].id);
+    }
+  });
+
+  if (isLoading) {
+    return (
+      <TeacherLayout breadcrumbs={[{ label: "Attendance" }]}>
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </TeacherLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <TeacherLayout breadcrumbs={[{ label: "Attendance" }]}>
+        <Alert variant="destructive" className="m-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      </TeacherLayout>
+    );
+  }
+
+  if (subjects.length === 0) {
+    return (
+      <TeacherLayout breadcrumbs={[{ label: "Attendance" }]}>
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+          <h2 className="text-2xl font-bold mb-2">No Subjects Assigned</h2>
+          <p className="text-muted-foreground">
+            You don&apos;t have any subjects assigned yet. Please contact the
+            administrator.
+          </p>
+        </div>
+      </TeacherLayout>
+    );
+  }
+
   return (
     <TeacherLayout breadcrumbs={[{ label: "Attendance" }]}>
       <div className="flex flex-col min-h-screen bg-background">
@@ -47,14 +116,17 @@ export default function AttendancePage() {
                 <label className="text-sm font-medium mb-2 block">
                   Subject
                 </label>
-                <Select value={subject} onValueChange={setSubject}>
+                <Select
+                  value={selectedSubjectId}
+                  onValueChange={setSelectedSubjectId}
+                >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Select subject" />
                   </SelectTrigger>
                   <SelectContent>
                     {subjects.map((s) => (
                       <SelectItem key={s.id} value={s.id}>
-                        {s.name}
+                        {s.course_code} - {s.descriptive_title}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -76,28 +148,49 @@ export default function AttendancePage() {
 
               <div>
                 <label className="text-sm font-medium mb-2 block">
-                  Session
+                  Schedule
                 </label>
-                <Select value={session} onValueChange={setSession}>
+                <Select
+                  value={selectedScheduleIndex.toString()}
+                  onValueChange={(value) =>
+                    setSelectedScheduleIndex(parseInt(value))
+                  }
+                  disabled={
+                    !selectedSubject || selectedSubject.schedules.length === 0
+                  }
+                >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Select schedule" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="morning">Morning</SelectItem>
-                    <SelectItem value="afternoon">Afternoon</SelectItem>
-                    <SelectItem value="evening">Evening</SelectItem>
+                    {selectedSubject?.schedules.map((schedule, index) => {
+                      const days = schedule.days
+                        .map((d) => DAYS_MAP[d] || d)
+                        .join(", ");
+                      return (
+                        <SelectItem key={index} value={index.toString()}>
+                          {days} • {schedule.time_start} - {schedule.time_end}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
 
               <div>
                 <label className="text-sm font-medium mb-2 block">
-                  Schedule
+                  Schedule Info
                 </label>
                 <div className="flex items-center h-10 px-3 border rounded-lg bg-muted text-sm">
-                  <span className="text-muted-foreground">
-                    {scheduleInfo.day} • {scheduleInfo.time}
-                  </span>
+                  {scheduleInfo ? (
+                    <span className="text-muted-foreground">
+                      {scheduleInfo.days} • {scheduleInfo.time}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">
+                      No schedule selected
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -126,15 +219,37 @@ export default function AttendancePage() {
             </TabsList>
 
             <TabsContent value="scan" className="space-y-4">
-              <ScanTab subject={subject} date={date} session={session} />
+              {selectedSubjectId && selectedSchedule ? (
+                <ScanTab
+                  subjectId={selectedSubjectId}
+                  schedule={selectedSchedule}
+                  date={date}
+                />
+              ) : (
+                <div className="text-center py-12 text-muted-foreground">
+                  Please select a subject and schedule to begin
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="list" className="space-y-4">
-              <ListTab subject={subject} date={date} />
+              {selectedSubjectId ? (
+                <ListTab subjectId={selectedSubjectId} date={date} />
+              ) : (
+                <div className="text-center py-12 text-muted-foreground">
+                  Please select a subject to view attendance list
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="stats" className="space-y-4">
-              <StatsTab subject={subject} />
+              {selectedSubjectId ? (
+                <StatsTab subjectId={selectedSubjectId} />
+              ) : (
+                <div className="text-center py-12 text-muted-foreground">
+                  Please select a subject to view statistics
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </div>
