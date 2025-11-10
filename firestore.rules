@@ -69,8 +69,11 @@ service cloud.firestore {
         allow read: if isSignedIn();
         // Teachers and admins can create attendance records
         allow create: if isTeacher() || isAdmin();
-        // Only admin can update or delete attendance
-        allow update, delete: if isAdmin();
+        // Teachers can update/delete attendance in their own subjects, admins can do all
+        allow update, delete: if isAdmin() || 
+                          (isTeacher() && 
+                           exists(/databases/$(database)/documents/subjects/$(subjectId)) &&
+                           get(/databases/$(database)/documents/subjects/$(subjectId)).data.teacher_id == request.auth.uid);
       }
     }
     
