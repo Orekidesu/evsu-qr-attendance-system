@@ -2,49 +2,17 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { Download, Trash2, Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useAttendanceData } from "@/hooks/useAttendanceData";
 import type { AttendanceStatus, Attendance } from "@/lib/types/attendance";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-
-interface AttendanceRecord {
-  id: string;
-  attendanceId: string;
-  studentId: string;
-  student_id: string;
-  name: string;
-  date: string;
-  status: AttendanceStatus;
-  time: string;
-  schedule: string;
-}
+import {
+  FilterControls,
+  ExportButton,
+  AttendanceTable,
+  type AttendanceRecord,
+} from "./list-tab-components";
 
 interface ListTabProps {
   subjectId: string;
@@ -196,101 +164,6 @@ export default function ListTab({ subjectId, date }: ListTabProps) {
     }
   };
 
-  // Get status badge color
-  const getStatusColor = (status: AttendanceStatus) => {
-    switch (status) {
-      case "Present":
-        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
-      case "Late":
-        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
-      case "Absent":
-        return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
-
-  // Export placeholder functions
-  const handleExportCSV = () => {
-    try {
-      // Prepare CSV headers
-      const headers = [
-        "Student ID",
-        "Student Name",
-        "Date",
-        "Time",
-        "Schedule",
-        "Status",
-      ];
-
-      // Prepare CSV rows from filtered records
-      const rows = filteredRecords.map((record) => [
-        record.student_id,
-        record.name,
-        new Date(record.date).toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        }),
-        record.time,
-        record.schedule,
-        record.status,
-      ]);
-
-      // Combine headers and rows
-      const csvContent = [
-        headers.join(","),
-        ...rows.map((row) =>
-          row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")
-        ),
-      ].join("\n");
-
-      // Create blob and download
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const link = document.createElement("a");
-      const url = URL.createObjectURL(blob);
-
-      // Generate filename with subject name and formatted date range
-      const subject = subjects.find((s) => s.id === subjectId);
-      const subjectName = subject
-        ? subject.descriptive_title.replace(/[^a-zA-Z0-9]/g, "_")
-        : subjectId;
-      const dateFromFormatted = new Date(dateFrom).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      });
-      const dateToFormatted = new Date(dateTo).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      });
-      const timestamp = new Date()
-        .toISOString()
-        .slice(0, 16)
-        .replace("T", "_")
-        .replace(/:/g, "-");
-      const filename = `${subjectName}_Attendance_${dateFromFormatted}_to_${dateToFormatted}_${timestamp}.csv`;
-
-      link.setAttribute("href", url);
-      link.setAttribute("download", filename);
-      link.style.visibility = "hidden";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      toast.success("CSV Downloaded", {
-        description: `Exported ${filteredRecords.length} records successfully`,
-      });
-    } catch (err) {
-      console.error("Error exporting CSV:", err);
-      toast.error("Export Failed", {
-        description: "Could not generate CSV file",
-      });
-    }
-  };
-
   // Loading state
   if (isLoading) {
     return (
@@ -332,168 +205,34 @@ export default function ListTab({ subjectId, date }: ListTabProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div>
-              <label className="text-sm font-medium mb-2 block">Search</label>
-              <Input
-                placeholder="Student name or ID"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">Status</label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="present">Present</SelectItem>
-                  <SelectItem value="late">Late</SelectItem>
-                  <SelectItem value="absent">Absent</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">From</label>
-              <Input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                max={dateTo}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">To</label>
-              <Input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                min={dateFrom}
-                max={today}
-              />
-            </div>
-          </div>
+          <FilterControls
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+            dateFrom={dateFrom}
+            onDateFromChange={setDateFrom}
+            dateTo={dateTo}
+            onDateToChange={setDateTo}
+            today={today}
+          />
 
           {/* Export Button */}
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleExportCSV}>
-              <Download className="w-4 h-4 mr-2" />
-              Export CSV ({filteredRecords.length} records)
-            </Button>
-          </div>
+          <ExportButton
+            filteredRecords={filteredRecords}
+            subjects={subjects}
+            subjectId={subjectId}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+          />
 
           {/* Table */}
-          <div className="border rounded-lg overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted">
-                  <TableHead>Student ID</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Schedule</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredRecords.length > 0 ? (
-                  filteredRecords.map((record) => (
-                    <TableRow key={record.id} className="hover:bg-muted/50">
-                      <TableCell className="font-medium">
-                        {record.student_id}
-                      </TableCell>
-                      <TableCell>{record.name}</TableCell>
-                      <TableCell>
-                        {new Date(record.date).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {record.time}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {record.schedule}
-                      </TableCell>
-                      <TableCell>
-                        <Select
-                          value={record.status}
-                          onValueChange={(value) =>
-                            handleStatusChange(
-                              record.attendanceId,
-                              value as AttendanceStatus
-                            )
-                          }
-                        >
-                          <SelectTrigger
-                            className={`w-28 h-7 text-xs ${getStatusColor(record.status)}`}
-                          >
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Present">Present</SelectItem>
-                            <SelectItem value="Late">Late</SelectItem>
-                            <SelectItem value="Absent">Absent</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-destructive hover:text-destructive"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogTitle>Delete Record?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Are you sure you want to delete this attendance
-                              record for {record.name}? This action cannot be
-                              undone.
-                            </AlertDialogDescription>
-                            <div className="flex gap-2 justify-end">
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() =>
-                                  handleDeleteRecord(record.attendanceId)
-                                }
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                              >
-                                Delete
-                              </AlertDialogAction>
-                            </div>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={7}
-                      className="text-center py-8 text-muted-foreground"
-                    >
-                      {records.length === 0
-                        ? "No attendance records yet"
-                        : "No records match your filters"}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-
-          <p className="text-sm text-muted-foreground">
-            Showing {filteredRecords.length} of {records.length} records
-          </p>
+          <AttendanceTable
+            filteredRecords={filteredRecords}
+            totalRecords={records.length}
+            onStatusChange={handleStatusChange}
+            onDeleteRecord={handleDeleteRecord}
+          />
         </CardContent>
       </Card>
     </div>
