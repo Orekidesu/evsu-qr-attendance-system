@@ -1,41 +1,19 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { Video, Type, RotateCcw, X, Loader2, AlertCircle } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAttendanceData } from "@/hooks/useAttendanceData";
 import { useCameraQR } from "@/hooks/useCameraQR";
 import type { Schedule } from "@/lib/types/subject";
 import type { AttendanceStatus, Attendance } from "@/lib/types/attendance";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-
-interface ScanRecord {
-  id: string;
-  studentId: string;
-  student_id: string;
-  name: string;
-  time: string;
-  status: AttendanceStatus;
-  attendanceId: string;
-}
+import {
+  CameraViewfinder,
+  RecentScans,
+  SessionInfo,
+  type ScanRecord,
+} from "./scan-tab-components";
 
 interface ScanTabProps {
   subjectId: string;
@@ -74,6 +52,22 @@ export default function ScanTab({ subjectId, schedule, date }: ScanTabProps) {
   const presentCount = scans.filter((s) => s.status === "Present").length;
   const lateCount = scans.filter((s) => s.status === "Late").length;
   const absentCount = totalStudents - presentCount - lateCount;
+
+  // Format schedule start time for display
+  const scheduleStartTime = useMemo(() => {
+    try {
+      const [hour, minute] = schedule.time_start.split(":").map(Number);
+      const time = new Date();
+      time.setHours(hour, minute);
+      return time.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+    } catch {
+      return "09:00 AM";
+    }
+  }, [schedule.time_start]);
 
   // Load existing attendance records
   useEffect(() => {
@@ -423,260 +417,31 @@ export default function ScanTab({ subjectId, schedule, date }: ScanTabProps) {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       {/* Left Side - Camera and Controls */}
       <div className="lg:col-span-2 space-y-4">
-        {/* Camera Viewfinder */}
-        <Card>
-          <CardHeader>
-            <CardTitle>QR Camera Viewfinder</CardTitle>
-            <CardDescription>
-              {camera.isActive
-                ? "Camera is active - point at QR code to scan"
-                : "Start camera to begin scanning"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {/* Camera View Container - Always rendered for DOM access */}
-            <div className="relative">
-              {/* Camera Status Display */}
-              {!camera.isActive && !camera.isInitializing && (
-                <div className="bg-muted rounded-lg aspect-video flex items-center justify-center border-2 border-dashed">
-                  <div className="text-center">
-                    <Video className="w-12 h-12 mx-auto text-muted-foreground mb-2" />
-                    <p className="text-sm text-muted-foreground">
-                      Point camera at QR code
-                    </p>
-                    {camera.error && (
-                      <p className="text-xs text-destructive mt-2">
-                        {camera.error}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
+        <CameraViewfinder
+          camera={camera}
+          manualEntry={manualEntry}
+          onManualEntryChange={setManualEntry}
+          onManualEntrySubmit={handleManualEntry}
+        />
 
-              {/* Initializing State */}
-              {camera.isInitializing && (
-                <div className="bg-muted rounded-lg aspect-video flex items-center justify-center border-2 border-dashed">
-                  <div className="text-center">
-                    <Loader2 className="w-12 h-12 mx-auto text-primary animate-spin mb-2" />
-                    <p className="text-sm text-muted-foreground">
-                      Initializing camera...
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* QR Reader Element - Always in DOM, visibility controlled by CSS */}
-              <div
-                id="qr-reader"
-                className={`... ${
-                  camera.isActive
-                    ? "relative z-10 border-primary opacity-100"
-                    : "absolute inset-0 opacity-0 pointer-events-none"
-                }`}
-              />
-              {/* Processing Indicator */}
-              {camera.isProcessing && (
-                <div className="text-center text-sm text-muted-foreground mt-2 flex items-center justify-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Processing scan...
-                </div>
-              )}
-            </div>
-
-            {/* Control Buttons */}
-            <div className="grid grid-cols-2 gap-2 mt-4">
-              <Button
-                variant={camera.isActive ? "destructive" : "default"}
-                onClick={
-                  camera.isActive ? camera.stopCamera : camera.startCamera
-                }
-                disabled={camera.isInitializing || camera.isProcessing}
-              >
-                <Video className="w-4 h-4 mr-2" />
-                {camera.isInitializing
-                  ? "Initializing..."
-                  : camera.isActive
-                    ? "Stop Camera"
-                    : "Start Camera"}
-              </Button>
-              <Button variant="outline" disabled>
-                <Type className="w-4 h-4 mr-2" />
-                Manual Entry
-              </Button>
-            </div>
-
-            {/* Capability Warnings */}
-            {!camera.capabilities.isSecureContext && (
-              <Alert variant="destructive" className="mt-4">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Security Warning</AlertTitle>
-                <AlertDescription>
-                  Camera access requires HTTPS connection. Please use HTTPS or
-                  localhost.
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {camera.capabilities.availableCameras === 0 &&
-              !camera.isInitializing && (
-                <Alert variant="destructive" className="mt-4">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>No Camera Detected</AlertTitle>
-                  <AlertDescription>
-                    No camera devices found. Please connect a camera or check
-                    your device settings.
-                  </AlertDescription>
-                </Alert>
-              )}
-
-            {/* Manual Entry Input */}
-            <div className="mt-4 space-y-2">
-              <label className="text-sm font-medium">
-                Or enter Student ID manually
-              </label>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Enter Student ID"
-                  value={manualEntry}
-                  onChange={(e) => setManualEntry(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleManualEntry()}
-                />
-                <Button onClick={handleManualEntry}>Add</Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Recent Scans */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Recent Scans</CardTitle>
-            <CardDescription>{scans.length} students scanned</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {scans.length > 0 ? (
-                scans.map((scan) => (
-                  <div
-                    key={scan.id}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition"
-                  >
-                    <div className="flex-1">
-                      <p className="font-medium text-sm">{scan.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {scan.studentId}
-                      </p>
-                    </div>
-                    <span className="text-xs text-muted-foreground mr-2">
-                      {scan.time}
-                    </span>
-                    <select
-                      value={scan.status}
-                      onChange={(e) =>
-                        changeStatus(
-                          scan.attendanceId,
-                          e.target.value as AttendanceStatus
-                        )
-                      }
-                      className="text-xs px-2 py-1 border rounded"
-                    >
-                      <option value="Present">Present</option>
-                      <option value="Late">Late</option>
-                      <option value="Absent">Absent</option>
-                    </select>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => undoScan(scan.attendanceId)}
-                      className="ml-2"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-8">
-                  No scans yet. Start by clicking &quot;Start Camera&quot; or
-                  entering a Student ID.
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        <RecentScans
+          scans={scans}
+          onStatusChange={changeStatus}
+          onRemoveScan={undoScan}
+        />
       </div>
 
       {/* Right Side - Session Info */}
       <div className="space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Session Info</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Stats */}
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs text-muted-foreground">Total Students</p>
-                <p className="text-2xl font-bold">{totalStudents}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Present</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {presentCount}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Late</p>
-                <p className="text-2xl font-bold text-yellow-600">
-                  {lateCount}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Absent</p>
-                <p className="text-2xl font-bold text-red-600">{absentCount}</p>
-              </div>
-            </div>
-
-            <div className="border-t pt-4">
-              <p className="text-sm font-medium">Start Time: 09:00 AM</p>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="space-y-2 pt-4 border-t">
-              <Button
-                variant="outline"
-                className="w-full bg-transparent"
-                onClick={markRemainingAbsent}
-              >
-                Mark Remaining Absent
-              </Button>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline" className="w-full bg-transparent">
-                    <X className="w-4 h-4 mr-2" />
-                    Clear All
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogTitle>Clear All Scans?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will remove all scanned records. This action cannot be
-                    undone.
-                  </AlertDialogDescription>
-                  <div className="flex gap-2 justify-end">
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={clearAll}
-                      className="bg-destructive"
-                    >
-                      Clear All
-                    </AlertDialogAction>
-                  </div>
-                </AlertDialogContent>
-              </AlertDialog>
-              <Button className="w-full bg-primary">End Session</Button>
-            </div>
-          </CardContent>
-        </Card>
+        <SessionInfo
+          totalStudents={totalStudents}
+          presentCount={presentCount}
+          lateCount={lateCount}
+          absentCount={absentCount}
+          scheduleStartTime={scheduleStartTime}
+          onMarkRemainingAbsent={markRemainingAbsent}
+          onClearAll={clearAll}
+        />
       </div>
     </div>
   );
