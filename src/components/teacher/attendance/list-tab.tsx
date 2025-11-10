@@ -265,7 +265,11 @@ export default function ListTab({ subjectId, date }: ListTabProps) {
         day: "numeric",
         year: "numeric",
       });
-      const timestamp = new Date().toISOString().slice(0, 16).replace("T", "_").replace(/:/g, "-");
+      const timestamp = new Date()
+        .toISOString()
+        .slice(0, 16)
+        .replace("T", "_")
+        .replace(/:/g, "-");
       const filename = `${subjectName}_Attendance_${dateFromFormatted}_to_${dateToFormatted}_${timestamp}.csv`;
 
       link.setAttribute("href", url);
