@@ -3,7 +3,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAttendanceData, type EnrolledStudent } from "./useAttendanceData";
 import { getAttendanceByStudent } from "@/lib/firebase/firestore/attendance";
+import { getAllPrograms } from "@/lib/firebase/firestore/programs";
 import type { Attendance } from "@/lib/types/attendance";
+import type { Program } from "@/lib/types/program";
 
 export interface StudentWithAttendance {
   studentId: string;
@@ -11,6 +13,7 @@ export interface StudentWithAttendance {
   name: string;
   email: string;
   program_id: string;
+  program_name: string;
   totalRecords: number;
   presentCount: number;
   lateCount: number;
@@ -28,6 +31,7 @@ export interface StudentAttendanceHistory extends Attendance {
 export function useTeacherStudentsData(subjectId: string) {
   const { enrollmentsBySubject, subjects } = useAttendanceData();
   const [studentsData, setStudentsData] = useState<StudentWithAttendance[]>([]);
+  const [programs, setPrograms] = useState<Program[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,11 +45,30 @@ export function useTeacherStudentsData(subjectId: string) {
     [subjects, subjectId]
   );
 
+  // Fetch programs on mount
+  useEffect(() => {
+    const loadPrograms = async () => {
+      try {
+        const programsData = await getAllPrograms();
+        setPrograms(programsData);
+      } catch (err) {
+        console.error("Error loading programs:", err);
+      }
+    };
+    loadPrograms();
+  }, []);
+
   // Fetch attendance statistics for all enrolled students
   useEffect(() => {
     const loadStudentsData = async () => {
-      if (!subjectId || enrolledStudents.length === 0) {
-        setStudentsData([]);
+      if (
+        !subjectId ||
+        enrolledStudents.length === 0 ||
+        programs.length === 0
+      ) {
+        if (programs.length > 0) {
+          setStudentsData([]);
+        }
         setIsLoading(false);
         return;
       }
@@ -87,12 +110,19 @@ export function useTeacherStudentsData(subjectId: string) {
                   ? Math.round((absentCount / totalRecords) * 100)
                   : 0;
 
+              // Find program name
+              const program = programs.find((p) => p.id === student.program_id);
+              const program_name = program
+                ? program.abbreviation
+                : student.program_id;
+
               return {
                 studentId: student.id,
                 student_id: student.student_id,
                 name: `${student.first_name} ${student.last_name}`,
                 email: student.email,
                 program_id: student.program_id,
+                program_name,
                 totalRecords,
                 presentCount,
                 lateCount,
@@ -107,12 +137,18 @@ export function useTeacherStudentsData(subjectId: string) {
                 err
               );
               // Return student with zero stats if fetch fails
+              const program = programs.find((p) => p.id === student.program_id);
+              const program_name = program
+                ? program.abbreviation
+                : student.program_id;
+
               return {
                 studentId: student.id,
                 student_id: student.student_id,
                 name: `${student.first_name} ${student.last_name}`,
                 email: student.email,
                 program_id: student.program_id,
+                program_name,
                 totalRecords: 0,
                 presentCount: 0,
                 lateCount: 0,
@@ -135,7 +171,7 @@ export function useTeacherStudentsData(subjectId: string) {
     };
 
     loadStudentsData();
-  }, [subjectId, enrolledStudents]);
+  }, [subjectId, enrolledStudents.length, programs]);
 
   // Fetch detailed attendance history for a specific student
   const fetchStudentAttendanceHistory = async (

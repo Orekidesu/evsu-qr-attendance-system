@@ -54,7 +54,7 @@ export function StudentsPageContent() {
   // Extract unique programs from students
   const programs = useMemo(() => {
     const uniquePrograms = new Set(
-      studentsData.map((student) => student.program_id)
+      studentsData.map((student) => student.program_name)
     );
     return Array.from(uniquePrograms).sort();
   }, [studentsData]);
@@ -76,7 +76,7 @@ export function StudentsPageContent() {
     // Program filter
     if (selectedProgram !== "all") {
       filtered = filtered.filter(
-        (student) => student.program_id === selectedProgram
+        (student) => student.program_name === selectedProgram
       );
     }
 
