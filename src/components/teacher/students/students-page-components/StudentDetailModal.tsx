@@ -115,7 +115,7 @@ export function StudentDetailModal({
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <BookOpen className="h-4 w-4" />
-                {student.program_id}
+                {student.program_name}
               </div>
             </div>
           </div>

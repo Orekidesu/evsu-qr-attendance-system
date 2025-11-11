@@ -68,7 +68,7 @@ export function StudentsTable({ students, onViewDetails }: StudentsTableProps) {
                 {student.email}
               </TableCell>
               <TableCell>
-                <Badge variant="outline">{student.program_id}</Badge>
+                <Badge variant="outline">{student.program_name}</Badge>
               </TableCell>
               <TableCell className="text-center">
                 {getStatusBadge(student.presentPercentage)}

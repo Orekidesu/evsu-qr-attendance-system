@@ -20,6 +20,7 @@ import {
   StudentDetailModal,
 } from "./students-page-components";
 import type { StudentWithAttendance } from "@/hooks/useTeacherStudentsData";
+import type { Schedule } from "@/lib/types/subject";
 
 export function StudentsPageContent() {
   const {
@@ -54,7 +55,7 @@ export function StudentsPageContent() {
   // Extract unique programs from students
   const programs = useMemo(() => {
     const uniquePrograms = new Set(
-      studentsData.map((student) => student.program_id)
+      studentsData.map((student) => student.program_name)
     );
     return Array.from(uniquePrograms).sort();
   }, [studentsData]);
@@ -76,7 +77,7 @@ export function StudentsPageContent() {
     // Program filter
     if (selectedProgram !== "all") {
       filtered = filtered.filter(
-        (student) => student.program_id === selectedProgram
+        (student) => student.program_name === selectedProgram
       );
     }
 
@@ -91,6 +92,19 @@ export function StudentsPageContent() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setSelectedStudent(null);
+  };
+
+  const formatSchedules = (schedules: Schedule[]) => {
+    if (!schedules || schedules.length === 0) return "N/A";
+
+    return schedules
+      .map((schedule) => {
+        if (!schedule.days || !schedule.time_start || !schedule.time_end) {
+          return "Invalid schedule";
+        }
+        return `${schedule.days.join(", ")} ${schedule.time_start}-${schedule.time_end}`;
+      })
+      .join("; ");
   };
 
   // Loading state
@@ -172,7 +186,7 @@ export function StudentsPageContent() {
             <div className="flex flex-col sm:flex-row gap-4 text-sm text-muted-foreground">
               <div>
                 <span className="font-medium">Schedules:</span>{" "}
-                {selectedSubject.schedules?.join(", ") || "N/A"}
+                {formatSchedules(selectedSubject.schedules)}
               </div>
               <div>
                 <span className="font-medium">Total Students:</span>{" "}
